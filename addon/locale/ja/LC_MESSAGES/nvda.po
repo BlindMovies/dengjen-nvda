@@ -1,16 +1,15 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# Japanese translation for Dengjen Neural Voices.
+# Copyright (C) 2026 Dengjen Neural Voices Contributors
 # This file is distributed under the same license as the 'dengjen_neural_voices' package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# BlindMovies <nuigurumi1120@icloud.com>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: 'dengjen_neural_voices' '4.1.0'\n"
 "Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
 "POT-Creation-Date: 2026-10-03 03:04+0900\n"
-"PO-Revision-Date: 2026-10-03 03:00+0900\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-10-03 06:45+0900\n"
+"Last-Translator: BlindMovies <nuigurumi1120@icloud.com>\n"
 "Language-Team: Japanese\n"
 "Language: ja\n"
 "MIME-Version: 1.0\n"
