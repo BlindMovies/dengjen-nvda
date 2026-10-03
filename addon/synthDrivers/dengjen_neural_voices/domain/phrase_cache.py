@@ -38,10 +38,12 @@ class PhraseCache:
         pitch: float | None,
         normalize: bool,
         night_mode: bool,
+        speaker: str | None = None,
     ) -> tuple:
         return (
             text.strip(),
             voice_key,
+            speaker,
             round(rate or 50.0, 1),
             round(volume or 100.0, 1),
             round(pitch or 50.0, 1),
@@ -58,9 +60,12 @@ class PhraseCache:
         pitch: float | None,
         normalize: bool = False,
         night_mode: bool = False,
+        speaker: str | None = None,
     ) -> list[bytes] | None:
         """Return cached PCM chunks or None on miss."""
-        key = self._make_key(text, voice_key, rate, volume, pitch, normalize, night_mode)
+        key = self._make_key(
+            text, voice_key, rate, volume, pitch, normalize, night_mode, speaker
+        )
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
@@ -79,12 +84,15 @@ class PhraseCache:
         normalize: bool,
         night_mode: bool,
         pcm_chunks: list[bytes],
+        speaker: str | None = None,
     ):
         """Store PCM chunks in the cache if they are small enough."""
         total_bytes = sum(len(c) for c in pcm_chunks)
         if total_bytes > self._max_entry_bytes or not pcm_chunks:
             return
-        key = self._make_key(text, voice_key, rate, volume, pitch, normalize, night_mode)
+        key = self._make_key(
+            text, voice_key, rate, volume, pitch, normalize, night_mode, speaker
+        )
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)

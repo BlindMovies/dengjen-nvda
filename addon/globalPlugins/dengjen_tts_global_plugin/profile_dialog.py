@@ -32,7 +32,11 @@ from .sized_controls import SizedPanel
 def _get_installed_voice_ids():
     """Retrieve installed voice IDs safely without requiring gRPC or backend instantiation."""
     synth = synthDriverHandler.getSynth()
-    if synth is not None and "dengjen" in synth.name.lower() and hasattr(synth, "availableVoices"):
+    if (
+        synth is not None
+        and "dengjen" in synth.name.lower()
+        and hasattr(synth, "availableVoices")
+    ):
         return sorted(synth.availableVoices.keys())
 
     # Fallback: scan disk directories directly
@@ -77,17 +81,29 @@ class DengjenEditProfileDialog(SimpleDialog):
             self.voice_choice.SetSelection(0)
 
         wx.StaticText(parent, label=_("Rate (0-100, blank=default):"))
-        rate_val = str(self._profile.get("rate", "")) if self._profile.get("rate") is not None else ""
+        rate_val = (
+            str(self._profile.get("rate", ""))
+            if self._profile.get("rate") is not None
+            else ""
+        )
         self.rate_ctrl = wx.TextCtrl(parent, value=rate_val)
         self.rate_ctrl.SetSizerProps(expand=True)
 
         wx.StaticText(parent, label=_("Volume (0-100, blank=default):"))
-        vol_val = str(self._profile.get("volume", "")) if self._profile.get("volume") is not None else ""
+        vol_val = (
+            str(self._profile.get("volume", ""))
+            if self._profile.get("volume") is not None
+            else ""
+        )
         self.volume_ctrl = wx.TextCtrl(parent, value=vol_val)
         self.volume_ctrl.SetSizerProps(expand=True)
 
         wx.StaticText(parent, label=_("Pitch (0-100, blank=default):"))
-        pitch_val = str(self._profile.get("pitch", "")) if self._profile.get("pitch") is not None else ""
+        pitch_val = (
+            str(self._profile.get("pitch", ""))
+            if self._profile.get("pitch") is not None
+            else ""
+        )
         self.pitch_ctrl = wx.TextCtrl(parent, value=pitch_val)
         self.pitch_ctrl.SetSizerProps(expand=True)
 
@@ -114,7 +130,12 @@ class DengjenEditProfileDialog(SimpleDialog):
     def _on_ok(self, event):
         exe = self.exe_ctrl.GetValue().strip().lower()
         if not exe:
-            gui.messageBox(_("Please enter an application name."), _("Error"), wx.OK | wx.ICON_ERROR, self)
+            gui.messageBox(
+                _("Please enter an application name."),
+                _("Error"),
+                wx.OK | wx.ICON_ERROR,
+                self,
+            )
             return
         self._exe_name = exe
         voice_idx = self.voice_choice.GetSelection()
@@ -220,11 +241,14 @@ class DengjenAppProfileDialog(SimpleDialog):
         exe = self._selected_exe()
         if exe is None:
             return
-        if gui.messageBox(
-            _("Delete profile for '{app}'?").format(app=exe),
-            _("Confirm"),
-            wx.YES_NO | wx.ICON_QUESTION,
-            self,
-        ) == wx.YES:
+        if (
+            gui.messageBox(
+                _("Delete profile for '{app}'?").format(app=exe),
+                _("Confirm"),
+                wx.YES_NO | wx.ICON_QUESTION,
+                self,
+            )
+            == wx.YES
+        ):
             app_profile_manager.delete_profile(exe)
             self._refresh_list()

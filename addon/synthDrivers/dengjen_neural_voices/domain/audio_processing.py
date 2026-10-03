@@ -50,10 +50,9 @@ def normalize_audio(pcm_bytes: bytes) -> bytes:
     gain = min(_TARGET_RMS / rms, 4.0)
     ceiling = int(_PEAK_CEILING * _INT16_MAX)
 
-    result = array.array("h", (
-        max(_INT16_MIN, min(ceiling, int(s * gain)))
-        for s in samples
-    ))
+    result = array.array(
+        "h", (max(_INT16_MIN, min(ceiling, int(s * gain))) for s in samples)
+    )
     return _array_to_pcm(result)
 
 

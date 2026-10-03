@@ -218,10 +218,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                                     "volume": synth.volume,
                                     "pitch": synth.pitch,
                                 }
+                            else:
+                                app_profile_manager.apply_profile_dict(
+                                    self._baseline_profile, synth
+                                )
                             app_profile_manager.apply_profile_dict(profile, synth)
                         elif self._baseline_profile is not None:
-                            app_profile_manager.apply_profile_dict(self._baseline_profile, synth)
-                            self._baseline_profile = None
+                            if app_profile_manager.apply_profile_dict(
+                                self._baseline_profile, synth
+                            ):
+                                self._baseline_profile = None
         except Exception:
             log.debug("Failed handling focus change for app profile", exc_info=True)
         nextHandler()

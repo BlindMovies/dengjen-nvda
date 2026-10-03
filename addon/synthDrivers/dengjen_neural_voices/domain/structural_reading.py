@@ -20,7 +20,9 @@ class SpeechSegment:
     speaker_name: str | None = None
 
 
-def split_into_segments(text: str, default_speaker: str | None = None, alt_speaker: str | None = None) -> list[SpeechSegment]:
+def split_into_segments(
+    text: str, default_speaker: str | None = None, alt_speaker: str | None = None
+) -> list[SpeechSegment]:
     if not text:
         return []
 
@@ -46,10 +48,16 @@ def split_into_segments(text: str, default_speaker: str | None = None, alt_speak
         if cursor < aside_start:
             main_text = text[cursor:aside_start]
             if main_text.strip():
-                segments.append(SpeechSegment(text=main_text, speaker_name=default_speaker))
+                segments.append(
+                    SpeechSegment(text=main_text, speaker_name=default_speaker)
+                )
         aside_text = text[aside_start:aside_end]
         if aside_text.strip():
-            segments.append(SpeechSegment(text=aside_text, speaker_name=alt_speaker or default_speaker))
+            segments.append(
+                SpeechSegment(
+                    text=aside_text, speaker_name=alt_speaker or default_speaker
+                )
+            )
         cursor = aside_end
 
     if cursor < len(text):
@@ -57,4 +65,8 @@ def split_into_segments(text: str, default_speaker: str | None = None, alt_speak
         if tail.strip():
             segments.append(SpeechSegment(text=tail, speaker_name=default_speaker))
 
-    return segments if segments else [SpeechSegment(text=text, speaker_name=default_speaker)]
+    return (
+        segments
+        if segments
+        else [SpeechSegment(text=text, speaker_name=default_speaker)]
+    )

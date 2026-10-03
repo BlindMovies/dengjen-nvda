@@ -29,14 +29,20 @@ class AppProfileManager:
         try:
             if not config.conf["speech"].isSet("dengjen_neural_voices"):
                 config.conf["speech"]["dengjen_neural_voices"] = {}
-            spec = ConfigObj(StringIO(_PROFILE_CONFIGSPEC), list_values=False, encoding="UTF-8")
+            spec = ConfigObj(
+                StringIO(_PROFILE_CONFIGSPEC), list_values=False, encoding="UTF-8"
+            )
             config.conf["speech"]["dengjen_neural_voices"].spec.update(spec)
         except Exception:
-            log.exception("Dengjen: Failed to initialize app_profiles configspec", exc_info=True)
+            log.exception(
+                "Dengjen: Failed to initialize app_profiles configspec", exc_info=True
+            )
 
     def _profiles_section(self):
         conf = config.conf["speech"]["dengjen_neural_voices"]
-        if "app_profiles" not in conf or not isinstance(conf["app_profiles"], (dict, Section, Mapping)):
+        if "app_profiles" not in conf or not isinstance(
+            conf["app_profiles"], (dict, Section, Mapping)
+        ):
             conf["app_profiles"] = {}
         return conf["app_profiles"]
 
