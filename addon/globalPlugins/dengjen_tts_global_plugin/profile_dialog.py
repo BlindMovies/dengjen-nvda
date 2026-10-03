@@ -1,5 +1,3 @@
-# coding: utf-8
-
 # Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
 # This file is covered by the GNU General Public License.
 
@@ -15,7 +13,6 @@ import addonHandler
 import gui
 import synthDriverHandler
 import wx
-from logHandler import log
 
 addonHandler.initTranslation()
 
@@ -25,8 +22,9 @@ _TTS_MODULE_DIR = os.path.join(_ADDON_ROOT, "synthDrivers")
 if _TTS_MODULE_DIR not in sys.path:
     sys.path.insert(0, _TTS_MODULE_DIR)
 
+from dengjen_neural_voices.const import DENGJEN_KOKORO_VOICES_DIR, DENGJEN_VOICES_DIR
 from dengjen_neural_voices.domain.app_profiles import app_profile_manager
-from dengjen_neural_voices.const import DENGJEN_VOICES_DIR, DENGJEN_KOKORO_VOICES_DIR
+
 from .components import SimpleDialog
 from .sized_controls import SizedPanel
 
@@ -35,7 +33,7 @@ def _get_installed_voice_ids():
     """Retrieve installed voice IDs safely without requiring gRPC or backend instantiation."""
     synth = synthDriverHandler.getSynth()
     if synth is not None and "dengjen" in synth.name.lower() and hasattr(synth, "availableVoices"):
-        return sorted(list(synth.availableVoices.keys()))
+        return sorted(synth.availableVoices.keys())
 
     # Fallback: scan disk directories directly
     voice_ids = set()
@@ -46,7 +44,7 @@ def _get_installed_voice_ids():
                 if sub.is_dir():
                     clean_name = sub.name.replace("+RT", "")
                     voice_ids.add(clean_name)
-    return sorted(list(voice_ids))
+    return sorted(voice_ids)
 
 
 class DengjenEditProfileDialog(SimpleDialog):

@@ -1,10 +1,7 @@
-# coding: utf-8
-
 # Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
 # This file is covered by the GNU General Public License.
 
-"""
-Phrase cache for Dengjen Neural Voices.
+"""Phrase cache for Dengjen Neural Voices.
 
 Caches synthesized PCM audio for short, frequently-used phrases to eliminate
 gRPC round-trip latency for common UI strings (e.g. "OK", "Cancel", desktop icons).
@@ -12,8 +9,6 @@ gRPC round-trip latency for common UI strings (e.g. "OK", "Cancel", desktop icon
 
 import threading
 from collections import OrderedDict
-from typing import List, Optional, Tuple
-
 
 _MAX_CACHE_SIZE = 120
 _MAX_ENTRY_SIZE_BYTES = 12 * 1024  # 12 KB max per phrase
@@ -22,26 +17,50 @@ _MAX_ENTRY_SIZE_BYTES = 12 * 1024  # 12 KB max per phrase
 class PhraseCache:
     """Thread-safe LRU cache for synthesized PCM audio chunks."""
 
-    def __init__(self, max_size: int = _MAX_CACHE_SIZE, max_entry_bytes: int = _MAX_ENTRY_SIZE_BYTES):
+    def __init__(
+        self,
+        max_size: int = _MAX_CACHE_SIZE,
+        max_entry_bytes: int = _MAX_ENTRY_SIZE_BYTES,
+    ):
         self._max_size = max_size
         self._max_entry_bytes = max_entry_bytes
-        self._cache: OrderedDict[Tuple, List[bytes]] = OrderedDict()
+        self._cache: OrderedDict[tuple, list[bytes]] = OrderedDict()
         self._lock = threading.Lock()
         self._hits = 0
         self._misses = 0
 
-    def _make_key(self, text: str, voice_key: str, rate: Optional[float], volume: Optional[float], pitch: Optional[float]) -> Tuple:
+    def _make_key(
+        self,
+        text: str,
+        voice_key: str,
+        rate: float | None,
+        volume: float | None,
+        pitch: float | None,
+        normalize: bool,
+        night_mode: bool,
+    ) -> tuple:
         return (
             text.strip(),
             voice_key,
             round(rate or 50.0, 1),
             round(volume or 100.0, 1),
             round(pitch or 50.0, 1),
+            normalize,
+            night_mode,
         )
 
-    def get(self, text: str, voice_key: str, rate: Optional[float], volume: Optional[float], pitch: Optional[float]) -> Optional[List[bytes]]:
+    def get(
+        self,
+        text: str,
+        voice_key: str,
+        rate: float | None,
+        volume: float | None,
+        pitch: float | None,
+        normalize: bool = False,
+        night_mode: bool = False,
+    ) -> list[bytes] | None:
         """Return cached PCM chunks or None on miss."""
-        key = self._make_key(text, voice_key, rate, volume, pitch)
+        key = self._make_key(text, voice_key, rate, volume, pitch, normalize, night_mode)
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
@@ -50,12 +69,22 @@ class PhraseCache:
             self._misses += 1
             return None
 
-    def put(self, text: str, voice_key: str, rate: Optional[float], volume: Optional[float], pitch: Optional[float], pcm_chunks: List[bytes]):
+    def put(
+        self,
+        text: str,
+        voice_key: str,
+        rate: float | None,
+        volume: float | None,
+        pitch: float | None,
+        normalize: bool,
+        night_mode: bool,
+        pcm_chunks: list[bytes],
+    ):
         """Store PCM chunks in the cache if they are small enough."""
         total_bytes = sum(len(c) for c in pcm_chunks)
         if total_bytes > self._max_entry_bytes or not pcm_chunks:
             return
-        key = self._make_key(text, voice_key, rate, volume, pitch)
+        key = self._make_key(text, voice_key, rate, volume, pitch, normalize, night_mode)
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)

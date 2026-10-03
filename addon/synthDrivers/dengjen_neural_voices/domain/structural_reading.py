@@ -1,15 +1,10 @@
-# coding: utf-8
-
 # Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
 # This file is covered by the GNU General Public License.
 
-"""
-Structural reading: alternate speakers for bracketed/quoted text segments.
-"""
+"""Structural reading: alternate speakers for bracketed/quoted text segments."""
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional
 
 _ASIDE_PATTERNS = [
     re.compile(r"\(([^)]{1,200})\)", re.DOTALL),
@@ -22,10 +17,10 @@ _ASIDE_PATTERNS = [
 @dataclass
 class SpeechSegment:
     text: str
-    speaker_index: Optional[int] = None
+    speaker_name: str | None = None
 
 
-def split_into_segments(text: str) -> List[SpeechSegment]:
+def split_into_segments(text: str, default_speaker: str | None = None, alt_speaker: str | None = None) -> list[SpeechSegment]:
     if not text:
         return []
 
@@ -35,7 +30,7 @@ def split_into_segments(text: str) -> List[SpeechSegment]:
             aside_spans.append((m.start(), m.end()))
 
     if not aside_spans:
-        return [SpeechSegment(text=text)]
+        return [SpeechSegment(text=text, speaker_name=default_speaker)]
 
     aside_spans.sort()
     merged = [aside_spans[0]]
@@ -45,21 +40,21 @@ def split_into_segments(text: str) -> List[SpeechSegment]:
         else:
             merged.append((start, end))
 
-    segments: List[SpeechSegment] = []
+    segments: list[SpeechSegment] = []
     cursor = 0
     for aside_start, aside_end in merged:
         if cursor < aside_start:
             main_text = text[cursor:aside_start]
             if main_text.strip():
-                segments.append(SpeechSegment(text=main_text, speaker_index=None))
+                segments.append(SpeechSegment(text=main_text, speaker_name=default_speaker))
         aside_text = text[aside_start:aside_end]
         if aside_text.strip():
-            segments.append(SpeechSegment(text=aside_text, speaker_index=1))
+            segments.append(SpeechSegment(text=aside_text, speaker_name=alt_speaker or default_speaker))
         cursor = aside_end
 
     if cursor < len(text):
         tail = text[cursor:]
         if tail.strip():
-            segments.append(SpeechSegment(text=tail, speaker_index=None))
+            segments.append(SpeechSegment(text=tail, speaker_name=default_speaker))
 
-    return segments if segments else [SpeechSegment(text=text)]
+    return segments if segments else [SpeechSegment(text=text, speaker_name=default_speaker)]

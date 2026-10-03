@@ -9,6 +9,8 @@ import core
 import globalPluginHandler
 import gui
 import synthDriverHandler
+import tones
+import ui
 import wx
 from logHandler import log
 
@@ -42,10 +44,9 @@ __all__ = [
     "voice_migration",
 ]
 
-import api
 from . import feedback
-from .voice_manager import DengjenVoiceManagerDialog, install_voice_from_local_file
 from .profile_dialog import DengjenAppProfileDialog
+from .voice_manager import DengjenVoiceManagerDialog, install_voice_from_local_file
 
 
 def _get_dengjen_synth():
@@ -56,10 +57,13 @@ def _get_dengjen_synth():
 
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
+    scriptCategory = _("Dengjen Neural Voices")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__voice_manager_shown = False
         self._last_exe = None
+        self._baseline_profile = None
         self._voice_check_timer = None
         self._voice_checker = self._schedule_voice_check
         core.postNvdaStartup.register(self._voice_checker)
@@ -174,6 +178,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         except Exception:
             log.exception("Failed to open Dengjen app profiles dialog", exc_info=True)
 
+    def script_toggleNightMode(self, gesture):
+        synth = _get_dengjen_synth()
+        if synth is not None:
+            current = getattr(synth, "night_mode", False)
+            synth.night_mode = not current
+            if synth.night_mode:
+                tones.beep(300, 80)
+                ui.message(_("Night mode enabled"))
+            else:
+                tones.beep(600, 80)
+                ui.message(_("Night mode disabled"))
+        else:
+            ui.message(_("Dengjen is not active"))
+
+    script_toggleNightMode.__doc__ = _("Toggles Dengjen night mode (soft, quiet audio)")
+
     def event_gainFocus(self, obj, nextHandler):
         try:
             app = getattr(obj, "appModule", None)
@@ -183,10 +203,27 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                     self._last_exe = exe
                     synth = _get_dengjen_synth()
                     if synth is not None:
-                        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
-                        app_profile_manager.apply_for_exe(exe, synth)
+                        from dengjen_neural_voices.domain.app_profiles import (
+                            app_profile_manager,
+                        )
+
+                        profile = app_profile_manager.get_profile(exe)
+                        if profile:
+                            if self._baseline_profile is None:
+                                self._baseline_profile = {
+                                    "voice": synth.voice,
+                                    "variant": synth.variant,
+                                    "speaker": synth.speaker,
+                                    "rate": synth.rate,
+                                    "volume": synth.volume,
+                                    "pitch": synth.pitch,
+                                }
+                            app_profile_manager.apply_profile_dict(profile, synth)
+                        elif self._baseline_profile is not None:
+                            app_profile_manager.apply_profile_dict(self._baseline_profile, synth)
+                            self._baseline_profile = None
         except Exception:
-            pass
+            log.debug("Failed handling focus change for app profile", exc_info=True)
         nextHandler()
 
     def terminate(self):
@@ -205,7 +242,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         try:
             gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.profileItemHandle)
         except Exception:
-            pass
+            log.debug("Failed to remove the Dengjen profile menu item", exc_info=True)
         try:
             gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.feedbackMenuHandle)
         except Exception:

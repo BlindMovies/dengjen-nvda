@@ -1,11 +1,7 @@
-# coding: utf-8
-
 # Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
 # This file is covered by the GNU General Public License.
 
-"""
-Application-specific voice profile manager for Dengjen Neural Voices.
-"""
+"""Application-specific voice profile manager for Dengjen Neural Voices."""
 
 from collections.abc import Mapping
 from io import StringIO
@@ -79,11 +75,9 @@ class AppProfileManager:
                     result.append((name, {k: v for k, v in data.items()}))
         return sorted(result, key=lambda x: x[0])
 
-    def apply_for_exe(self, exe_name: str, synth_driver) -> bool:
-        profile = self.get_profile(exe_name)
+    def apply_profile_dict(self, profile: dict, synth_driver) -> bool:
         if not profile:
             return False
-
         try:
             if profile.get("voice") and synth_driver.voice != profile["voice"]:
                 synth_driver.voice = profile["voice"]
@@ -97,11 +91,19 @@ class AppProfileManager:
                 synth_driver.volume = int(profile["volume"])
             if profile.get("pitch") is not None:
                 synth_driver.pitch = int(profile["pitch"])
-            log.debug(f"Dengjen: applied app profile for '{exe_name}'")
             return True
         except Exception:
-            log.exception(f"Dengjen: failed to apply app profile for '{exe_name}'")
+            log.exception("Dengjen: failed to apply profile dict")
             return False
+
+    def apply_for_exe(self, exe_name: str, synth_driver) -> bool:
+        profile = self.get_profile(exe_name)
+        if not profile:
+            return False
+        applied = self.apply_profile_dict(profile, synth_driver)
+        if applied:
+            log.debug(f"Dengjen: applied app profile for '{exe_name}'")
+        return applied
 
 
 app_profile_manager = AppProfileManager()

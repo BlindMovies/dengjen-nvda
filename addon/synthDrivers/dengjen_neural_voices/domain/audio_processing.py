@@ -1,10 +1,7 @@
-# coding: utf-8
-
 # Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
 # This file is covered by the GNU General Public License.
 
-"""
-Audio post-processing utilities for Dengjen Neural Voices.
+"""Audio post-processing utilities for Dengjen Neural Voices.
 
 Provides:
   - normalize_audio()      : RMS-based volume normalization with peak limiter
@@ -61,8 +58,8 @@ def normalize_audio(pcm_bytes: bytes) -> bytes:
 
 
 def mono_to_stereo_panned(pcm_bytes: bytes, pan: float) -> bytes:
-    """
-    Convert 16-bit mono PCM to 16-bit stereo PCM with equal-power panning.
+    """Convert 16-bit mono PCM to 16-bit stereo PCM with equal-power panning.
+
     pan: float in [-1.0, 1.0] (-1.0 = left, 0.0 = center, +1.0 = right)
     """
     if len(pcm_bytes) < 2:
@@ -76,10 +73,10 @@ def mono_to_stereo_panned(pcm_bytes: bytes, pan: float) -> bytes:
     mono = _pcm_to_array(pcm_bytes)
     stereo = array.array("h")
     for s in mono:
-        l = max(_INT16_MIN, min(_INT16_MAX, int(s * left_gain)))
-        r = max(_INT16_MIN, min(_INT16_MAX, int(s * right_gain)))
-        stereo.append(l)
-        stereo.append(r)
+        left_sample = max(_INT16_MIN, min(_INT16_MAX, int(s * left_gain)))
+        right_sample = max(_INT16_MIN, min(_INT16_MAX, int(s * right_gain)))
+        stereo.append(left_sample)
+        stereo.append(right_sample)
 
     return _array_to_pcm(stereo)
 
