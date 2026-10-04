@@ -10,7 +10,6 @@ import globalPluginHandler
 import gui
 import languageHandler
 import synthDriverHandler
-import tones
 import ui
 import wx
 from logHandler import log
@@ -79,12 +78,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         )
         self.profileItemHandle = None
         if hasattr(gui.mainFrame.sysTrayIcon, "preferencesMenu"):
-            self.profileItemHandle = (
-                gui.mainFrame.sysTrayIcon.preferencesMenu.Append(
-                    wx.ID_ANY,
-                    _("Dengjen app &profiles..."),
-                    _("Configure per-application Dengjen voice profiles"),
-                )
+            self.profileItemHandle = gui.mainFrame.sysTrayIcon.preferencesMenu.Append(
+                wx.ID_ANY,
+                _("Dengjen app &profiles..."),
+                _("Configure per-application Dengjen voice profiles"),
             )
             gui.mainFrame.sysTrayIcon.preferencesMenu.Bind(
                 wx.EVT_MENU, self.on_app_profiles, self.profileItemHandle
@@ -239,6 +236,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def script_toggleNightMode(self, gesture):
         synth = _get_dengjen_synth()
         if synth is not None:
+            import tones
+
             current = getattr(synth, "night_mode", False)
             synth.night_mode = not current
             if synth.night_mode:

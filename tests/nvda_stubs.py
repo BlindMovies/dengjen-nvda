@@ -335,6 +335,7 @@ def install(*, stub_wx: bool = True) -> None:
             pass
 
     _stub_module("globalPluginHandler", GlobalPlugin=_FakeGlobalPlugin)
+    _stub_module("tones", beep=MagicMock())
     _stub_module("ui", message=MagicMock())
 
     # -----------------------------------------------------------------------
