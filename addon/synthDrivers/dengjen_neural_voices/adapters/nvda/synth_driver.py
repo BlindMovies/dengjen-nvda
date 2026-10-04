@@ -42,11 +42,7 @@ from ...aio import (
     asyncio_coroutine_to_concurrent_future,
     run_in_executor,
 )
-from ...domain.audio_processing import (
-    apply_night_mode,
-    mono_to_stereo_panned,
-    normalize_audio,
-)
+from ...domain.audio_processing import AudioStreamProcessor
 from ...domain.phrase_cache import phrase_cache
 from ...domain.structural_reading import split_into_segments
 from ...domain.tts_system import (
@@ -205,17 +201,32 @@ class SpeechTask:
             feed_func = self.player.feed
             collected_chunks = []
             pan = self.pan if self.spatial_audio else 0.0
+            needs_processing = self.night_mode or self.normalize or self.spatial_audio
+            processor = (
+                AudioStreamProcessor(
+                    normalize=self.normalize,
+                    night_mode=self.night_mode,
+                    spatial_audio=self.spatial_audio,
+                    pan=pan,
+                )
+                if needs_processing
+                else None
+            )
 
             async for wave_samples in speech_stream:
                 chunk = wave_samples
-                if self.night_mode:
-                    chunk = await run_in_executor(apply_night_mode, chunk)
-                if self.normalize:
-                    chunk = await run_in_executor(normalize_audio, chunk)
-                if self.spatial_audio:
-                    chunk = await run_in_executor(mono_to_stereo_panned, chunk, pan)
-                collected_chunks.append(chunk)
-                await run_in_executor(feed_func, chunk)
+                if processor is not None:
+                    chunk = await run_in_executor(processor.process_chunk, chunk)
+                if chunk:
+                    collected_chunks.append(chunk)
+                    await run_in_executor(feed_func, chunk)
+
+            if processor is not None:
+                final_chunk = await run_in_executor(processor.flush)
+                if final_chunk:
+                    collected_chunks.append(final_chunk)
+                    await run_in_executor(feed_func, final_chunk)
+
             self.player.sync()
 
             if not self.spatial_audio and collected_chunks:

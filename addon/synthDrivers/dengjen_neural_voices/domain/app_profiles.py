@@ -3,11 +3,11 @@
 
 """Application-specific voice profile manager for Dengjen Neural Voices."""
 
-from collections.abc import Mapping
+import contextlib
 from io import StringIO
 
 import config
-from configobj import ConfigObj, Section
+from configobj import ConfigObj
 from logHandler import log
 
 _PROFILE_CONFIGSPEC = """
@@ -40,45 +40,85 @@ class AppProfileManager:
 
     def _profiles_section(self):
         conf = config.conf["speech"]["dengjen_neural_voices"]
-        if "app_profiles" not in conf or not isinstance(
-            conf["app_profiles"], (dict, Section, Mapping)
-        ):
+        if "app_profiles" not in conf:
             conf["app_profiles"] = {}
         return conf["app_profiles"]
 
     def get_profile(self, exe_name: str) -> dict:
         exe = exe_name.lower()
         section = self._profiles_section()
-        if exe in section and isinstance(section[exe], (dict, Section, Mapping)):
-            return dict(section[exe])
+        if exe in section:
+            data = section[exe]
+            if hasattr(data, "dict"):
+                return {k: v for k, v in data.dict().items() if v is not None}
+            if hasattr(data, "items") or isinstance(data, dict):
+                return {k: v for k, v in data.items() if v is not None}
         return {}
 
     def set_profile(self, exe_name: str, **kwargs):
         exe = exe_name.lower()
         section = self._profiles_section()
-        if exe not in section or not isinstance(section[exe], (dict, Section, Mapping)):
+        if exe not in section:
             section[exe] = {}
+        target = section[exe]
         for key, value in kwargs.items():
             if value is None:
-                section[exe].pop(key, None)
+                underlying = None
+                if hasattr(target, "_getUpdateSection"):
+                    with contextlib.suppress(Exception):
+                        underlying = target._getUpdateSection()
+                if underlying is not None and hasattr(underlying, "pop"):
+                    underlying.pop(key, None)
+                elif hasattr(target, "pop"):
+                    target.pop(key, None)
+                elif hasattr(target, "__delitem__"):
+                    with contextlib.suppress(Exception):
+                        del target[key]
+                if hasattr(target, "_cache") and isinstance(target._cache, dict):
+                    target._cache.pop(key, None)
             else:
-                section[exe][key] = value
+                target[key] = value
 
     def delete_profile(self, exe_name: str):
         exe = exe_name.lower()
         section = self._profiles_section()
-        if exe in section:
-            del section[exe]
+        profiles = getattr(config.conf, "profiles", [])
+        for p in profiles:
+            with contextlib.suppress(Exception):
+                p_conf = p
+                for k in ("speech", "dengjen_neural_voices", "app_profiles"):
+                    p_conf = p_conf.get(k) if hasattr(p_conf, "get") else None
+                    if p_conf is None:
+                        break
+                if p_conf is not None and exe in p_conf:
+                    del p_conf[exe]
+        if hasattr(section, "_getUpdateSection"):
+            with contextlib.suppress(Exception):
+                update_sec = section._getUpdateSection()
+                if hasattr(update_sec, "__delitem__") and exe in update_sec:
+                    del update_sec[exe]
+        with contextlib.suppress(Exception):
+            if exe in section and hasattr(section, "__delitem__"):
+                del section[exe]
+        if hasattr(section, "_cache") and isinstance(section._cache, dict):
+            section._cache.pop(exe, None)
 
     def list_profiles(self) -> list:
         section = self._profiles_section()
         result = []
         if hasattr(section, "items"):
             for name, data in section.items():
-                if isinstance(data, (dict, Section, Mapping)):
-                    result.append((name, dict(data)))
-                elif hasattr(data, "items"):
-                    result.append((name, {k: v for k, v in data.items()}))
+                if hasattr(data, "dict"):
+                    result.append(
+                        (
+                            name,
+                            {k: v for k, v in data.dict().items() if v is not None},
+                        )
+                    )
+                elif hasattr(data, "items") or isinstance(data, dict):
+                    result.append(
+                        (name, {k: v for k, v in data.items() if v is not None})
+                    )
         return sorted(result, key=lambda x: x[0])
 
     def apply_profile_dict(self, profile: dict, synth_driver) -> bool:
