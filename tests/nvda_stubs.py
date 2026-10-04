@@ -231,6 +231,7 @@ def install(*, stub_wx: bool = True) -> None:
     _stub_module("autoSettingsUtils")
     _stub_module(
         "autoSettingsUtils.driverSetting",
+        BooleanDriverSetting=MagicMock(return_value=MagicMock()),
         DriverSetting=MagicMock(return_value=MagicMock()),
         NumericDriverSetting=MagicMock(return_value=MagicMock()),
     )

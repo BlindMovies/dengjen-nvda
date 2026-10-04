@@ -4,7 +4,6 @@ from collections import OrderedDict
 from contextlib import suppress
 
 import addonHandler
-import api
 import config
 import languageHandler
 import ui
@@ -110,6 +109,7 @@ class IndexReachedTask:
 
 def _get_focus_pan() -> float:
     try:
+        import api
         import wx
 
         obj = api.getFocusObject()
@@ -558,9 +558,16 @@ class SynthDriver(NvdaSynthDriver):
 
     def _get_or_create_player(self, sample_rate):
         channels = 2 if self._get_spatial_audio() else 1
-        key = (sample_rate, channels)
+        key = sample_rate if channels == 1 else (sample_rate, channels)
         if key not in self._players:
-            player = create_wave_player(sample_rate, channels=channels)
+            try:
+                player = (
+                    create_wave_player(sample_rate, channels=channels)
+                    if channels != 1
+                    else create_wave_player(sample_rate)
+                )
+            except TypeError:
+                player = create_wave_player(sample_rate)
             player.setVolume(all=self.tts.volume / 100)
             self._players[key] = player
         return self._players[key]
