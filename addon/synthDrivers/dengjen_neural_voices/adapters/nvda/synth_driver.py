@@ -545,15 +545,7 @@ class SynthDriver(NvdaSynthDriver):
     def _set_spatial_audio(self, value):
         self._spatial_audio_enabled = bool(value)
         phrase_cache.clear()
-        if (
-            getattr(self, "tts", None) is not None
-            and getattr(self, "_players", None) is not None
-            and getattr(self.tts, "speech_options", None) is not None
-            and getattr(self.tts.speech_options, "voice", None) is not None
-        ):
-            self._player = self._get_or_create_player(
-                self.tts.speech_options.voice.sample_rate
-            )
+        self._player = None
 
     def _get_structural_reading(self):
         return getattr(self, "_structural_reading_enabled", False)

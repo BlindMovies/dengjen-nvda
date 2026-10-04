@@ -182,6 +182,7 @@ class TestConstruction:
         try:
             assert d.tts is not None
             d.variant = d.variant
+            d.spatial_audio = True
         finally:
             d.terminate()
 
