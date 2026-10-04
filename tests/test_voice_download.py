@@ -717,6 +717,10 @@ class TestVoicesCache:
         monkeypatch.setattr(voice_download, "BUNDLED_PIPER_VOICES_JSON", str(path))
         return path
 
+    def test_cache_file_name_embeds_the_pinned_catalog_revision(self):
+        name = os.path.basename(voice_download.PIPER_VOICES_JSON_LOCAL_CACHE)
+        assert voice_download.PIPER_VOICES_REVISION[:12] in name
+
     def test_get_voices_from_cache_returns_none_when_file_is_missing(self, cache_path):
         assert voice_download._get_voices_from_cache() is None
 
@@ -738,6 +742,37 @@ class TestVoicesCache:
             classmethod(lambda cls, backend: []),
         )
         assert voice_download._get_voices_from_cache() is None
+
+    def test_get_local_catalog_prefers_the_user_cache_and_never_goes_online(
+        self, cache_path, bundled_path, monkeypatch
+    ):
+        cache_path.write_text(json.dumps({}), encoding="utf-8")
+        bundled_path.write_text("not json", encoding="utf-8")
+        fake_request = _FakeMureq()
+        monkeypatch.setattr(download_infra, "request", fake_request)
+        monkeypatch.setattr(
+            voice_download.DengjenTextToSpeechSystem,
+            "load_piper_voices_from_nvda_config_dir",
+            classmethod(lambda cls, backend: []),
+        )
+        assert voice_download.get_local_catalog() == []
+        assert fake_request.get_urls == []
+
+    def test_get_local_catalog_falls_back_to_the_bundled_snapshot(
+        self, cache_path, bundled_path, monkeypatch
+    ):
+        bundled_path.write_text(json.dumps({}), encoding="utf-8")
+        monkeypatch.setattr(
+            voice_download.DengjenTextToSpeechSystem,
+            "load_piper_voices_from_nvda_config_dir",
+            classmethod(lambda cls, backend: []),
+        )
+        assert voice_download.get_local_catalog() == []
+
+    def test_get_local_catalog_is_empty_without_any_catalog_file(
+        self, cache_path, bundled_path
+    ):
+        assert voice_download.get_local_catalog() == []
 
     def test_get_available_voices_uses_the_cache_without_going_online(
         self, cache_path, monkeypatch
