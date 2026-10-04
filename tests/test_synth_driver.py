@@ -204,6 +204,39 @@ class TestConstruction:
         finally:
             d.terminate()
 
+    def test_loads_saved_settings_without_crash(
+        self, monkeypatch, configured_voice, fake_backend
+    ):
+        """Simulate NVDA loadSettings calling setters when loading saved settings."""
+        import synthDriverHandler
+
+        orig_init = synthDriverHandler.SynthDriver.__init__
+
+        def _init_with_load_settings(synth_self):
+            orig_init(synth_self)
+            # In NVDA, AutoPropertyObject.__init__ calls loadSettings(), which sets
+            # supported settings from config before Dengjen's own __init__ body runs.
+            synth_self._set_spatial_audio(True)
+            synth_self._set_night_mode(True)
+
+        monkeypatch.setattr(
+            synthDriverHandler.SynthDriver, "__init__", _init_with_load_settings
+        )
+
+        d = SynthDriver()
+        try:
+            assert d.spatial_audio is True
+            assert d.night_mode is True
+            assert d.tts is not None
+        finally:
+            d.terminate()
+
+    def test_set_spatial_audio_before_init_does_not_raise(self):
+        """Calling _set_spatial_audio on an uninitialized instance must not raise."""
+        d = SynthDriver.__new__(SynthDriver)
+        d._set_spatial_audio(True)
+        assert d.spatial_audio is True
+
 
 class TestBuildSpeechTasks:
     """`_build_speech_tasks` is where flush/cancel ordering bugs have

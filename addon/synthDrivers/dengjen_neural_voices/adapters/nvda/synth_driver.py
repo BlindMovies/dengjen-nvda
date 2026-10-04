@@ -545,7 +545,12 @@ class SynthDriver(NvdaSynthDriver):
     def _set_spatial_audio(self, value):
         self._spatial_audio_enabled = bool(value)
         phrase_cache.clear()
-        if self.tts and self.tts.speech_options.voice:
+        if (
+            getattr(self, "tts", None) is not None
+            and getattr(self, "_players", None) is not None
+            and getattr(self.tts, "speech_options", None) is not None
+            and getattr(self.tts.speech_options, "voice", None) is not None
+        ):
             self._player = self._get_or_create_player(
                 self.tts.speech_options.voice.sample_rate
             )
@@ -567,6 +572,10 @@ class SynthDriver(NvdaSynthDriver):
                     else create_wave_player(sample_rate)
                 )
             except TypeError:
+                if channels != 1:
+                    self._spatial_audio_enabled = False
+                    channels = 1
+                    key = sample_rate
                 player = create_wave_player(sample_rate)
             player.setVolume(all=self.tts.volume / 100)
             self._players[key] = player

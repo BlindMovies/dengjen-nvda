@@ -219,10 +219,14 @@ class DengjenAppProfileDialog(SimpleDialog):
 
     def _on_add(self, event):
         dlg = DengjenEditProfileDialog(self)
-        if gui.runScriptModalDialog(dlg) == wx.ID_OK:
-            exe, profile = dlg.get_result()
-            app_profile_manager.set_profile(exe, **profile)
-            self._refresh_list()
+
+        def _on_done(result):
+            if result == wx.ID_OK:
+                exe, profile = dlg.get_result()
+                app_profile_manager.set_profile(exe, **profile)
+                self._refresh_list()
+
+        gui.runScriptModalDialog(dlg, _on_done)
 
     def _on_edit(self, event):
         exe = self._selected_exe()
@@ -230,12 +234,16 @@ class DengjenAppProfileDialog(SimpleDialog):
             return
         profile = app_profile_manager.get_profile(exe)
         dlg = DengjenEditProfileDialog(self, exe_name=exe, profile=profile)
-        if gui.runScriptModalDialog(dlg) == wx.ID_OK:
-            new_exe, new_profile = dlg.get_result()
-            if new_exe != exe:
-                app_profile_manager.delete_profile(exe)
-            app_profile_manager.set_profile(new_exe, **new_profile)
-            self._refresh_list()
+
+        def _on_done(result):
+            if result == wx.ID_OK:
+                new_exe, new_profile = dlg.get_result()
+                if new_exe != exe:
+                    app_profile_manager.delete_profile(exe)
+                app_profile_manager.set_profile(new_exe, **new_profile)
+                self._refresh_list()
+
+        gui.runScriptModalDialog(dlg, _on_done)
 
     def _on_delete(self, event):
         exe = self._selected_exe()

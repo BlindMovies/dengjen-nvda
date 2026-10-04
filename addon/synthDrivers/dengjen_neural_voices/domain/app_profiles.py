@@ -192,17 +192,29 @@ class AppProfileManager:
                 try:
                     synth_driver.rate = max(0, min(100, int(profile["rate"])))
                 except (ValueError, TypeError):
-                    pass
+                    log.debug(
+                        "Dengjen: invalid rate in app profile: %r",
+                        profile.get("rate"),
+                        exc_info=True,
+                    )
             if profile.get("volume") is not None:
                 try:
                     synth_driver.volume = max(0, min(100, int(profile["volume"])))
                 except (ValueError, TypeError):
-                    pass
+                    log.debug(
+                        "Dengjen: invalid volume in app profile: %r",
+                        profile.get("volume"),
+                        exc_info=True,
+                    )
             if profile.get("pitch") is not None:
                 try:
                     synth_driver.pitch = max(0, min(100, int(profile["pitch"])))
                 except (ValueError, TypeError):
-                    pass
+                    log.debug(
+                        "Dengjen: invalid pitch in app profile: %r",
+                        profile.get("pitch"),
+                        exc_info=True,
+                    )
             return True
         except Exception:
             log.exception("Dengjen: failed to apply profile dict")

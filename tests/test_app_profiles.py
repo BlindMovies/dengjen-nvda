@@ -1,13 +1,16 @@
-# Copyright (c) 2026 Musharraf Omer, Ali Ustek, and contributors
-# This file is covered by the GNU General Public License.
-
+import os
 from unittest.mock import MagicMock
 
 import pytest
 
-from addon.synthDrivers.dengjen_neural_voices.domain.app_profiles import (
-    AppProfileManager,
+from tests.conftest import SYNTH_PKG_DIR, load_module_from_path
+
+app_profiles = load_module_from_path(
+    "dengjen_neural_voices.domain._app_profiles_under_test",
+    os.path.join(SYNTH_PKG_DIR, "domain", "app_profiles.py"),
+    package="dengjen_neural_voices.domain",
 )
+AppProfileManager = app_profiles.AppProfileManager
 
 
 class FakeProfile(dict):
@@ -120,10 +123,13 @@ class TestAppProfileManager:
         assert "profile1" in config.conf._dirtyProfiles
         assert "profile2" in config.conf._dirtyProfiles
 
-    def test_apply_profile_dict_clamps_and_handles_bad_values(self):
+    def test_apply_profile_dict_clamps_and_handles_bad_values(self, monkeypatch):
         mgr = AppProfileManager()
         synth = MagicMock()
         synth.voice = "old_voice"
+
+        debug_mock = MagicMock()
+        monkeypatch.setattr(app_profiles.log, "debug", debug_mock)
 
         profile = {
             "voice": "new_voice",
@@ -136,5 +142,5 @@ class TestAppProfileManager:
         assert synth.voice == "new_voice"
         assert synth.rate == 100
         assert synth.volume == 0
-        # Invalid pitch should be ignored, leaving synth unchanged
-        assert not synth.pitch.called if hasattr(synth.pitch, "called") else True
+        debug_mock.assert_called_once()
+        assert "invalid pitch" in debug_mock.call_args[0][0]

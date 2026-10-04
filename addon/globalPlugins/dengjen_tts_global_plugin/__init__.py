@@ -64,7 +64,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         super().__init__(*args, **kwargs)
         self.__voice_manager_shown = False
         self._last_exe = None
-        self._baseline_profile = None
+        self._active_profile_overrides = None
         self._voice_check_timer = None
         self._voice_checker = self._schedule_voice_check
         core.postNvdaStartup.register(self._voice_checker)
@@ -257,34 +257,31 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             if app:
                 exe = getattr(app, "appName", "").lower()
                 if exe and exe != self._last_exe:
-                    self._last_exe = exe
                     synth = _get_dengjen_synth()
                     if synth is not None:
+                        self._last_exe = exe
                         from dengjen_neural_voices.domain.app_profiles import (
                             app_profile_manager,
                         )
 
                         profile = app_profile_manager.get_profile(exe)
                         if profile:
-                            if self._baseline_profile is None:
-                                self._baseline_profile = {
-                                    "voice": synth.voice,
-                                    "variant": synth.variant,
-                                    "speaker": synth.speaker,
-                                    "rate": synth.rate,
-                                    "volume": synth.volume,
-                                    "pitch": synth.pitch,
-                                }
-                            else:
+                            if self._active_profile_overrides is not None:
                                 app_profile_manager.apply_profile_dict(
-                                    self._baseline_profile, synth
+                                    self._active_profile_overrides, synth
                                 )
+                            self._active_profile_overrides = {
+                                k: getattr(synth, k, None)
+                                for k in profile
+                                if hasattr(synth, k)
+                                and getattr(synth, k, None) is not None
+                            }
                             app_profile_manager.apply_profile_dict(profile, synth)
-                        elif self._baseline_profile is not None:
-                            if app_profile_manager.apply_profile_dict(
-                                self._baseline_profile, synth
-                            ):
-                                self._baseline_profile = None
+                        elif self._active_profile_overrides is not None:
+                            app_profile_manager.apply_profile_dict(
+                                self._active_profile_overrides, synth
+                            )
+                            self._active_profile_overrides = None
         except Exception:
             log.debug("Failed handling focus change for app profile", exc_info=True)
         nextHandler()

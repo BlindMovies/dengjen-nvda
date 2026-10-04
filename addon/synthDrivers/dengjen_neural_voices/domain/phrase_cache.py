@@ -26,8 +26,6 @@ class PhraseCache:
         self._max_entry_bytes = max_entry_bytes
         self._cache: OrderedDict[tuple, list[bytes]] = OrderedDict()
         self._lock = threading.Lock()
-        self._hits = 0
-        self._misses = 0
 
     def _make_key(
         self,
@@ -44,9 +42,9 @@ class PhraseCache:
             text.strip(),
             voice_key,
             speaker,
-            round(rate or 50.0, 1),
-            round(volume or 100.0, 1),
-            round(pitch or 50.0, 1),
+            round(50.0 if rate is None else rate, 1),
+            round(100.0 if volume is None else volume, 1),
+            round(50.0 if pitch is None else pitch, 1),
             normalize,
             night_mode,
         )
@@ -69,9 +67,7 @@ class PhraseCache:
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
-                self._hits += 1
                 return list(self._cache[key])
-            self._misses += 1
             return None
 
     def put(
@@ -102,19 +98,10 @@ class PhraseCache:
             if len(self._cache) > self._max_size:
                 self._cache.popitem(last=False)
 
-    def invalidate_voice(self, voice_key: str):
-        """Remove all entries for a specific voice (e.g. after voice change)."""
-        with self._lock:
-            to_delete = [k for k in self._cache if k[1] == voice_key]
-            for k in to_delete:
-                del self._cache[k]
-
     def clear(self):
         """Clear all cached entries."""
         with self._lock:
             self._cache.clear()
-            self._hits = 0
-            self._misses = 0
 
 
 phrase_cache = PhraseCache()
