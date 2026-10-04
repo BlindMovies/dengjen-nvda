@@ -162,7 +162,7 @@ class SpeechTask:
 
         voice = self.task.speech_options.voice
         voice_key = voice.key
-        orig_speaker = getattr(voice, "speaker", None)
+        orig_speaker = await run_in_executor(getattr, voice, "speaker", None)
         speaker = self.speaker if self.speaker is not None else orig_speaker
 
         def _apply_speaker(spk):
@@ -194,7 +194,7 @@ class SpeechTask:
                     feed_func = self.player.feed
                     for chunk in cached:
                         await run_in_executor(feed_func, chunk)
-                    self.player.sync()
+                    await run_in_executor(self.player.sync)
                     return
 
             speech_stream = self.task.generate_audio()
@@ -227,7 +227,7 @@ class SpeechTask:
                     collected_chunks.append(final_chunk)
                     await run_in_executor(feed_func, final_chunk)
 
-            self.player.sync()
+            await run_in_executor(self.player.sync)
 
             if not self.spatial_audio and collected_chunks:
                 phrase_cache.put(

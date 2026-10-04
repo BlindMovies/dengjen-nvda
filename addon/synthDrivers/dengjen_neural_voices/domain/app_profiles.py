@@ -44,20 +44,52 @@ class AppProfileManager:
             conf["app_profiles"] = {}
         return conf["app_profiles"]
 
+    def _ensure_section_spec(self, section, exe: str):
+        """Ensure concrete application section has a valid spec inherited from __many__."""
+        if not exe or exe == "__many__" or exe.startswith("__"):
+            return
+        spec = getattr(section, "_spec", None)
+        if (
+            spec is not None
+            and hasattr(spec, "get")
+            and exe not in spec
+            and "__many__" in spec
+        ):
+            with contextlib.suppress(Exception):
+                many_spec = spec["__many__"]
+                if hasattr(many_spec, "copy"):
+                    spec[exe] = many_spec.copy()
+                elif isinstance(many_spec, dict):
+                    spec[exe] = dict(many_spec)
+
     def get_profile(self, exe_name: str) -> dict:
         exe = exe_name.lower()
+        if not exe or exe == "__many__" or exe.startswith("__"):
+            return {}
         section = self._profiles_section()
+        self._ensure_section_spec(section, exe)
         if exe in section:
             data = section[exe]
             if hasattr(data, "dict"):
-                return {k: v for k, v in data.dict().items() if v is not None}
+                return {
+                    k: v
+                    for k, v in data.dict().items()
+                    if v is not None and not k.startswith("__")
+                }
             if hasattr(data, "items") or isinstance(data, dict):
-                return {k: v for k, v in data.items() if v is not None}
+                return {
+                    k: v
+                    for k, v in data.items()
+                    if v is not None and not k.startswith("__")
+                }
         return {}
 
     def set_profile(self, exe_name: str, **kwargs):
         exe = exe_name.lower()
+        if not exe or exe == "__many__" or exe.startswith("__"):
+            return
         section = self._profiles_section()
+        self._ensure_section_spec(section, exe)
         if exe not in section:
             section[exe] = {}
         target = section[exe]
@@ -76,11 +108,16 @@ class AppProfileManager:
                         del target[key]
                 if hasattr(target, "_cache") and isinstance(target._cache, dict):
                     target._cache.pop(key, None)
+                if hasattr(config.conf, "_markWriteProfileDirty"):
+                    with contextlib.suppress(Exception):
+                        config.conf._markWriteProfileDirty()
             else:
                 target[key] = value
 
     def delete_profile(self, exe_name: str):
         exe = exe_name.lower()
+        if not exe or exe == "__many__" or exe.startswith("__"):
+            return
         section = self._profiles_section()
         profiles = getattr(config.conf, "profiles", [])
         for p in profiles:
@@ -92,6 +129,10 @@ class AppProfileManager:
                         break
                 if p_conf is not None and exe in p_conf:
                     del p_conf[exe]
+                    if hasattr(config.conf, "_dirtyProfiles") and getattr(
+                        p, "name", None
+                    ):
+                        config.conf._dirtyProfiles.add(p.name)
         if hasattr(section, "_getUpdateSection"):
             with contextlib.suppress(Exception):
                 update_sec = section._getUpdateSection()
@@ -102,22 +143,38 @@ class AppProfileManager:
                 del section[exe]
         if hasattr(section, "_cache") and isinstance(section._cache, dict):
             section._cache.pop(exe, None)
+        if hasattr(config.conf, "_markWriteProfileDirty"):
+            with contextlib.suppress(Exception):
+                config.conf._markWriteProfileDirty()
 
     def list_profiles(self) -> list:
         section = self._profiles_section()
         result = []
         if hasattr(section, "items"):
             for name, data in section.items():
+                if not name or name == "__many__" or name.startswith("__"):
+                    continue
                 if hasattr(data, "dict"):
                     result.append(
                         (
                             name,
-                            {k: v for k, v in data.dict().items() if v is not None},
+                            {
+                                k: v
+                                for k, v in data.dict().items()
+                                if v is not None and not k.startswith("__")
+                            },
                         )
                     )
                 elif hasattr(data, "items") or isinstance(data, dict):
                     result.append(
-                        (name, {k: v for k, v in data.items() if v is not None})
+                        (
+                            name,
+                            {
+                                k: v
+                                for k, v in data.items()
+                                if v is not None and not k.startswith("__")
+                            },
+                        )
                     )
         return sorted(result, key=lambda x: x[0])
 
@@ -132,11 +189,20 @@ class AppProfileManager:
             if profile.get("speaker"):
                 synth_driver.speaker = profile["speaker"]
             if profile.get("rate") is not None:
-                synth_driver.rate = int(profile["rate"])
+                try:
+                    synth_driver.rate = max(0, min(100, int(profile["rate"])))
+                except (ValueError, TypeError):
+                    pass
             if profile.get("volume") is not None:
-                synth_driver.volume = int(profile["volume"])
+                try:
+                    synth_driver.volume = max(0, min(100, int(profile["volume"])))
+                except (ValueError, TypeError):
+                    pass
             if profile.get("pitch") is not None:
-                synth_driver.pitch = int(profile["pitch"])
+                try:
+                    synth_driver.pitch = max(0, min(100, int(profile["pitch"])))
+                except (ValueError, TypeError):
+                    pass
             return True
         except Exception:
             log.exception("Dengjen: failed to apply profile dict")
