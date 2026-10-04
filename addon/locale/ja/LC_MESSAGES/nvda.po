@@ -618,3 +618,21 @@ msgstr "'{app}' のプロファイルを削除しますか？"
 
 msgid "Confirm"
 msgstr "確認"
+
+msgid "&Night mode"
+msgstr "ナイトモード(&N)"
+
+msgid "Dengjen is not active"
+msgstr "Dengjenはアクティブではありません"
+
+msgid "Night mode disabled"
+msgstr "ナイトモード無効"
+
+msgid "Night mode enabled"
+msgstr "ナイトモード有効"
+
+msgid "Rate"
+msgstr "速度"
+
+msgid "Voice"
+msgstr "音声"
