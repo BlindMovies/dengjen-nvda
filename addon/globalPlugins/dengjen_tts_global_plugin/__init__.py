@@ -77,14 +77,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         gui.mainFrame.sysTrayIcon.menu.Bind(
             wx.EVT_MENU, self.on_manager, self.itemHandle
         )
-        self.profileItemHandle = gui.mainFrame.sysTrayIcon.menu.Append(
-            wx.ID_ANY,
-            _("Dengjen app &profiles..."),
-            _("Configure per-application Dengjen voice profiles"),
-        )
-        gui.mainFrame.sysTrayIcon.menu.Bind(
-            wx.EVT_MENU, self.on_app_profiles, self.profileItemHandle
-        )
+        self.profileItemHandle = None
+        if hasattr(gui.mainFrame.sysTrayIcon, "preferencesMenu"):
+            self.profileItemHandle = (
+                gui.mainFrame.sysTrayIcon.preferencesMenu.Append(
+                    wx.ID_ANY,
+                    _("Dengjen app &profiles..."),
+                    _("Configure per-application Dengjen voice profiles"),
+                )
+            )
+            gui.mainFrame.sysTrayIcon.preferencesMenu.Bind(
+                wx.EVT_MENU, self.on_app_profiles, self.profileItemHandle
+            )
         self.feedbackMenuHandle = self._build_feedback_submenu()
 
     def _build_feedback_submenu(self):
@@ -299,10 +303,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.itemHandle)
         except Exception:
             log.debug("Failed to remove the Dengjen menu item", exc_info=True)
-        try:
-            gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.profileItemHandle)
-        except Exception:
-            log.debug("Failed to remove the Dengjen profile menu item", exc_info=True)
+        if (
+            hasattr(gui.mainFrame.sysTrayIcon, "preferencesMenu")
+            and self.profileItemHandle is not None
+        ):
+            try:
+                gui.mainFrame.sysTrayIcon.preferencesMenu.DestroyItem(
+                    self.profileItemHandle
+                )
+            except Exception:
+                log.debug(
+                    "Failed to remove the Dengjen profile menu item", exc_info=True
+                )
         try:
             gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.feedbackMenuHandle)
         except Exception:
