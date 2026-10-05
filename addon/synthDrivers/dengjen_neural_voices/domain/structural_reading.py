@@ -20,30 +20,36 @@ class SpeechSegment:
     speaker_name: str | None = None
 
 
-def split_into_segments(
-    text: str, default_speaker: str | None = None, alt_speaker: str | None = None
-) -> list[SpeechSegment]:
-    if not text:
-        return []
-
-    aside_spans = []
+def _collect_aside_spans(text: str) -> list[tuple[int, int]]:
+    spans = []
     for pattern in _ASIDE_PATTERNS:
         for m in pattern.finditer(text):
-            aside_spans.append((m.start(), m.end()))
+            spans.append((m.start(), m.end()))
+    return sorted(spans)
 
-    if not aside_spans:
-        return [SpeechSegment(text=text, speaker_name=default_speaker)]
 
-    aside_spans.sort()
-    merged = [aside_spans[0]]
-    for start, end in aside_spans[1:]:
+def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    if not spans:
+        return []
+    merged = [spans[0]]
+    for start, end in spans[1:]:
         if start <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
             merged.append((start, end))
+    return merged
 
+
+def _build_segments_from_spans(
+    text: str,
+    merged: list[tuple[int, int]],
+    default_speaker: str | None,
+    alt_speaker: str | None,
+) -> list[SpeechSegment]:
     segments: list[SpeechSegment] = []
     cursor = 0
+    effective_alt = alt_speaker or default_speaker
+
     for aside_start, aside_end in merged:
         if cursor < aside_start:
             main_text = text[cursor:aside_start]
@@ -53,11 +59,7 @@ def split_into_segments(
                 )
         aside_text = text[aside_start:aside_end]
         if aside_text.strip():
-            segments.append(
-                SpeechSegment(
-                    text=aside_text, speaker_name=alt_speaker or default_speaker
-                )
-            )
+            segments.append(SpeechSegment(text=aside_text, speaker_name=effective_alt))
         cursor = aside_end
 
     if cursor < len(text):
@@ -65,6 +67,21 @@ def split_into_segments(
         if tail.strip():
             segments.append(SpeechSegment(text=tail, speaker_name=default_speaker))
 
+    return segments
+
+
+def split_into_segments(
+    text: str, default_speaker: str | None = None, alt_speaker: str | None = None
+) -> list[SpeechSegment]:
+    if not text:
+        return []
+
+    spans = _collect_aside_spans(text)
+    if not spans:
+        return [SpeechSegment(text=text, speaker_name=default_speaker)]
+
+    merged = _merge_spans(spans)
+    segments = _build_segments_from_spans(text, merged, default_speaker, alt_speaker)
     return (
         segments
         if segments

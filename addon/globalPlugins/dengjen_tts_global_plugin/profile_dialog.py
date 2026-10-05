@@ -200,8 +200,8 @@ class DengjenAppProfileDialog(SimpleDialog):
 
     def getButtons(self, parent):
         btnsizer = wx.StdDialogButtonSizer()
-        closeBtn = wx.Button(self, wx.ID_CANCEL, _("&Close"))
-        btnsizer.AddButton(closeBtn)
+        close_btn = wx.Button(self, wx.ID_CANCEL, _("&Close"))
+        btnsizer.AddButton(close_btn)
         btnsizer.Realize()
         return btnsizer
 

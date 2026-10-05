@@ -22,6 +22,57 @@ pitch    = integer(default=None, min=0, max=100)
 """
 
 
+def _is_valid_exe(exe: str) -> bool:
+    return bool(exe and exe != "__many__" and not exe.startswith("__"))
+
+
+def _extract_profile_data(data) -> dict:
+    if hasattr(data, "dict"):
+        items = data.dict().items()
+    elif hasattr(data, "items") or isinstance(data, dict):
+        items = data.items()
+    else:
+        return {}
+    return {k: v for k, v in items if v is not None and not k.startswith("__")}
+
+
+def _delete_target_key(target, key: str) -> None:
+    underlying = None
+    if hasattr(target, "_getUpdateSection"):
+        with contextlib.suppress(Exception):
+            underlying = target._getUpdateSection()
+    if underlying is not None and hasattr(underlying, "pop"):
+        underlying.pop(key, None)
+    elif hasattr(target, "pop"):
+        target.pop(key, None)
+    elif hasattr(target, "__delitem__"):
+        with contextlib.suppress(Exception):
+            del target[key]
+    if hasattr(target, "_cache") and isinstance(target._cache, dict):
+        target._cache.pop(key, None)
+
+
+def _delete_exe_from_profiles(profiles, exe: str) -> None:
+    for p in profiles:
+        with contextlib.suppress(Exception):
+            p_conf = p
+            for k in ("speech", "dengjen_neural_voices", "app_profiles"):
+                p_conf = p_conf.get(k) if hasattr(p_conf, "get") else None
+                if p_conf is None:
+                    break
+            if p_conf is not None and exe in p_conf:
+                del p_conf[exe]
+                if hasattr(config.conf, "_dirtyProfiles") and getattr(p, "name", None):
+                    config.conf._dirtyProfiles.add(p.name)
+
+
+def _remove_section_spec(section, exe: str) -> None:
+    spec = getattr(section, "_spec", None)
+    if spec is not None and hasattr(spec, "pop"):
+        with contextlib.suppress(Exception):
+            spec.pop(exe, None)
+
+
 class AppProfileManager:
     """Manages per-application voice settings."""
 
@@ -46,7 +97,7 @@ class AppProfileManager:
 
     def _ensure_section_spec(self, section, exe: str):
         """Ensure concrete application section has a valid spec inherited from __many__."""
-        if not exe or exe == "__many__" or exe.startswith("__"):
+        if not _is_valid_exe(exe):
             return
         spec = getattr(section, "_spec", None)
         if (
@@ -64,29 +115,15 @@ class AppProfileManager:
 
     def get_profile(self, exe_name: str) -> dict:
         exe = exe_name.lower()
-        if not exe or exe == "__many__" or exe.startswith("__"):
+        if not _is_valid_exe(exe):
             return {}
         section = self._profiles_section()
         self._ensure_section_spec(section, exe)
-        if exe in section:
-            data = section[exe]
-            if hasattr(data, "dict"):
-                return {
-                    k: v
-                    for k, v in data.dict().items()
-                    if v is not None and not k.startswith("__")
-                }
-            if hasattr(data, "items") or isinstance(data, dict):
-                return {
-                    k: v
-                    for k, v in data.items()
-                    if v is not None and not k.startswith("__")
-                }
-        return {}
+        return _extract_profile_data(section[exe]) if exe in section else {}
 
     def set_profile(self, exe_name: str, **kwargs):
         exe = exe_name.lower()
-        if not exe or exe == "__many__" or exe.startswith("__"):
+        if not _is_valid_exe(exe):
             return
         section = self._profiles_section()
         self._ensure_section_spec(section, exe)
@@ -95,19 +132,7 @@ class AppProfileManager:
         target = section[exe]
         for key, value in kwargs.items():
             if value is None:
-                underlying = None
-                if hasattr(target, "_getUpdateSection"):
-                    with contextlib.suppress(Exception):
-                        underlying = target._getUpdateSection()
-                if underlying is not None and hasattr(underlying, "pop"):
-                    underlying.pop(key, None)
-                elif hasattr(target, "pop"):
-                    target.pop(key, None)
-                elif hasattr(target, "__delitem__"):
-                    with contextlib.suppress(Exception):
-                        del target[key]
-                if hasattr(target, "_cache") and isinstance(target._cache, dict):
-                    target._cache.pop(key, None)
+                _delete_target_key(target, key)
                 if hasattr(config.conf, "_markWriteProfileDirty"):
                     with contextlib.suppress(Exception):
                         config.conf._markWriteProfileDirty()
@@ -116,23 +141,10 @@ class AppProfileManager:
 
     def delete_profile(self, exe_name: str):
         exe = exe_name.lower()
-        if not exe or exe == "__many__" or exe.startswith("__"):
+        if not _is_valid_exe(exe):
             return
         section = self._profiles_section()
-        profiles = getattr(config.conf, "profiles", [])
-        for p in profiles:
-            with contextlib.suppress(Exception):
-                p_conf = p
-                for k in ("speech", "dengjen_neural_voices", "app_profiles"):
-                    p_conf = p_conf.get(k) if hasattr(p_conf, "get") else None
-                    if p_conf is None:
-                        break
-                if p_conf is not None and exe in p_conf:
-                    del p_conf[exe]
-                    if hasattr(config.conf, "_dirtyProfiles") and getattr(
-                        p, "name", None
-                    ):
-                        config.conf._dirtyProfiles.add(p.name)
+        _delete_exe_from_profiles(getattr(config.conf, "profiles", []), exe)
         if hasattr(section, "_getUpdateSection"):
             with contextlib.suppress(Exception):
                 update_sec = section._getUpdateSection()
@@ -143,6 +155,7 @@ class AppProfileManager:
                 del section[exe]
         if hasattr(section, "_cache") and isinstance(section._cache, dict):
             section._cache.pop(exe, None)
+        _remove_section_spec(section, exe)
         if hasattr(config.conf, "_markWriteProfileDirty"):
             with contextlib.suppress(Exception):
                 config.conf._markWriteProfileDirty()
@@ -151,31 +164,12 @@ class AppProfileManager:
         section = self._profiles_section()
         result = []
         if hasattr(section, "items"):
-            for name, data in section.items():
-                if not name or name == "__many__" or name.startswith("__"):
+            for name, raw in section.items():
+                if not _is_valid_exe(name):
                     continue
-                if hasattr(data, "dict"):
-                    result.append(
-                        (
-                            name,
-                            {
-                                k: v
-                                for k, v in data.dict().items()
-                                if v is not None and not k.startswith("__")
-                            },
-                        )
-                    )
-                elif hasattr(data, "items") or isinstance(data, dict):
-                    result.append(
-                        (
-                            name,
-                            {
-                                k: v
-                                for k, v in data.items()
-                                if v is not None and not k.startswith("__")
-                            },
-                        )
-                    )
+                data = _extract_profile_data(raw)
+                if data:
+                    result.append((name, data))
         return sorted(result, key=lambda x: x[0])
 
     def apply_profile_dict(self, profile: dict, synth_driver) -> bool:

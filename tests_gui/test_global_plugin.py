@@ -167,10 +167,12 @@ class TestVoiceCheck:
         assert gui.runScriptModalDialog.called
 
     def test_it_stays_quiet_when_a_voice_is_installed(
-        self, plugin, one_installed_voice
+        self, plugin, one_installed_voice, monkeypatch
     ):
+        monkeypatch.setattr(plugin, "_offer_language_voice", MagicMock())
         plugin._perform_voice_check()
         assert not gui.runScriptModalDialog.called
+        plugin._offer_language_voice.assert_called_once()
 
     def test_it_stays_quiet_once_the_manager_has_been_opened(
         self, plugin, no_installed_voices

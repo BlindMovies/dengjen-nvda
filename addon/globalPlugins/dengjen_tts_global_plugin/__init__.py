@@ -49,6 +49,8 @@ from . import download_infra, feedback, language_offer_logic, voice_download
 from .profile_dialog import DengjenAppProfileDialog
 from .voice_manager import DengjenVoiceManagerDialog, install_voice_from_local_file
 
+ADDON_LABEL = _("Dengjen Neural Voices")
+
 
 def _get_dengjen_synth():
     synth = synthDriverHandler.getSynth()
@@ -58,7 +60,7 @@ def _get_dengjen_synth():
 
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
-    scriptCategory = _("Dengjen Neural Voices")
+    scriptCategory = ADDON_LABEL
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -171,7 +173,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 "No installed Dengjen voice matches NVDA's language, but one is "
                 "available to download."
             ),
-            _("Dengjen Neural Voices"),
+            ADDON_LABEL,
             wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
         )
         dlg.SetYesNoCancelLabels(
@@ -201,7 +203,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 "You can download a voice online, or install one from a "
                 "local archive if you already have one."
             ),
-            _("Dengjen Neural Voices"),
+            ADDON_LABEL,
             wx.YES_NO | wx.CANCEL | wx.ICON_WARNING,
         )
         dlg.SetYesNoCancelLabels(
@@ -251,40 +253,39 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     script_toggleNightMode.__doc__ = _("Toggles Dengjen night mode (soft, quiet audio)")
 
-    def event_gainFocus(self, obj, nextHandler):
+    def _handle_app_focus(self, exe: str, synth):
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        profile = app_profile_manager.get_profile(exe)
+        if profile:
+            if self._active_profile_overrides is not None:
+                app_profile_manager.apply_profile_dict(
+                    self._active_profile_overrides, synth
+                )
+            self._active_profile_overrides = {
+                k: getattr(synth, k, None)
+                for k in profile
+                if hasattr(synth, k) and getattr(synth, k, None) is not None
+            }
+            app_profile_manager.apply_profile_dict(profile, synth)
+        elif self._active_profile_overrides is not None:
+            app_profile_manager.apply_profile_dict(
+                self._active_profile_overrides, synth
+            )
+            self._active_profile_overrides = None
+
+    def event_gainFocus(self, obj, next_handler):
         try:
             app = getattr(obj, "appModule", None)
-            if app:
-                exe = getattr(app, "appName", "").lower()
-                if exe and exe != self._last_exe:
-                    synth = _get_dengjen_synth()
-                    if synth is not None:
-                        self._last_exe = exe
-                        from dengjen_neural_voices.domain.app_profiles import (
-                            app_profile_manager,
-                        )
-
-                        profile = app_profile_manager.get_profile(exe)
-                        if profile:
-                            if self._active_profile_overrides is not None:
-                                app_profile_manager.apply_profile_dict(
-                                    self._active_profile_overrides, synth
-                                )
-                            self._active_profile_overrides = {
-                                k: getattr(synth, k, None)
-                                for k in profile
-                                if hasattr(synth, k)
-                                and getattr(synth, k, None) is not None
-                            }
-                            app_profile_manager.apply_profile_dict(profile, synth)
-                        elif self._active_profile_overrides is not None:
-                            app_profile_manager.apply_profile_dict(
-                                self._active_profile_overrides, synth
-                            )
-                            self._active_profile_overrides = None
+            exe = getattr(app, "appName", "").lower() if app else ""
+            if exe and exe != self._last_exe:
+                synth = _get_dengjen_synth()
+                if synth is not None:
+                    self._last_exe = exe
+                    self._handle_app_focus(exe, synth)
         except Exception:
             log.debug("Failed handling focus change for app profile", exc_info=True)
-        nextHandler()
+        next_handler()
 
     def terminate(self):
         try:

@@ -155,6 +155,55 @@ class SpeechTask:
         self.pan = pan
         self.speaker = speaker
 
+    def _check_cache(self, voice_key, rate, volume, pitch, speaker):
+        if self.spatial_audio:
+            return None
+        return phrase_cache.get(
+            self.task.text,
+            voice_key,
+            rate,
+            volume,
+            pitch,
+            normalize=self.normalize,
+            night_mode=self.night_mode,
+            speaker=speaker,
+        )
+
+    async def _play_chunks(self, chunks):
+        feed_func = self.player.feed
+        for chunk in chunks:
+            await run_in_executor(feed_func, chunk)
+        await run_in_executor(self.player.sync)
+
+    def _create_processor(self):
+        if not (self.night_mode or self.normalize or self.spatial_audio):
+            return None
+        pan = self.pan if self.spatial_audio else 0.0
+        return AudioStreamProcessor(
+            normalize=self.normalize,
+            night_mode=self.night_mode,
+            spatial_audio=self.spatial_audio,
+            pan=pan,
+        )
+
+    async def _synthesize_and_stream(self, processor):
+        collected = []
+        feed_func = self.player.feed
+        async for wave_samples in self.task.generate_audio():
+            chunk = wave_samples
+            if processor is not None:
+                chunk = await run_in_executor(processor.process_chunk, chunk)
+            if chunk:
+                collected.append(chunk)
+                await run_in_executor(feed_func, chunk)
+        if processor is not None:
+            final_chunk = await run_in_executor(processor.flush)
+            if final_chunk:
+                collected.append(final_chunk)
+                await run_in_executor(feed_func, final_chunk)
+        await run_in_executor(self.player.sync)
+        return collected
+
     async def __call__(self):
         if sayAll.SayAllHandler.isRunning():
             self.task.text = self.task.text.replace("\n", " ")
@@ -179,55 +228,13 @@ class SpeechTask:
             volume = self.task.speech_options.volume
             pitch = self.task.speech_options.pitch
 
-            if not self.spatial_audio:
-                cached = phrase_cache.get(
-                    self.task.text,
-                    voice_key,
-                    rate,
-                    volume,
-                    pitch,
-                    normalize=self.normalize,
-                    night_mode=self.night_mode,
-                    speaker=speaker,
-                )
-                if cached is not None:
-                    feed_func = self.player.feed
-                    for chunk in cached:
-                        await run_in_executor(feed_func, chunk)
-                    await run_in_executor(self.player.sync)
-                    return
+            cached = self._check_cache(voice_key, rate, volume, pitch, speaker)
+            if cached is not None:
+                await self._play_chunks(cached)
+                return
 
-            speech_stream = self.task.generate_audio()
-            feed_func = self.player.feed
-            collected_chunks = []
-            pan = self.pan if self.spatial_audio else 0.0
-            needs_processing = self.night_mode or self.normalize or self.spatial_audio
-            processor = (
-                AudioStreamProcessor(
-                    normalize=self.normalize,
-                    night_mode=self.night_mode,
-                    spatial_audio=self.spatial_audio,
-                    pan=pan,
-                )
-                if needs_processing
-                else None
-            )
-
-            async for wave_samples in speech_stream:
-                chunk = wave_samples
-                if processor is not None:
-                    chunk = await run_in_executor(processor.process_chunk, chunk)
-                if chunk:
-                    collected_chunks.append(chunk)
-                    await run_in_executor(feed_func, chunk)
-
-            if processor is not None:
-                final_chunk = await run_in_executor(processor.flush)
-                if final_chunk:
-                    collected_chunks.append(final_chunk)
-                    await run_in_executor(feed_func, final_chunk)
-
-            await run_in_executor(self.player.sync)
+            processor = self._create_processor()
+            collected_chunks = await self._synthesize_and_stream(processor)
 
             if not self.spatial_audio and collected_chunks:
                 phrase_cache.put(

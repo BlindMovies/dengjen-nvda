@@ -881,3 +881,171 @@ class TestConstructionWithAKokoroVoicePresent:
             )
         finally:
             d.terminate()
+
+
+class TestSpeechTaskExecution:
+    @pytest.fixture(autouse=True)
+    def clean_cache(self, monkeypatch):
+        phrase_cache = driver_module.phrase_cache
+        phrase_cache.clear()
+
+        async def _fake_run_in_executor(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(driver_module, "run_in_executor", _fake_run_in_executor)
+
+        yield
+        phrase_cache.clear()
+
+    def _make_mock_task(self, text="hello world", chunks=None):
+        if chunks is None:
+            # 2 chunks of 16-bit PCM (e.g. 4 samples each, 8 bytes each)
+            chunks = [
+                b"\x00\x10\x00\x20\x00\x10\x00\x20",
+                b"\x00\x05\x00\x15\x00\x05\x00\x15",
+            ]
+
+        async def _gen():
+            for c in chunks:
+                yield c
+
+        mock_task = MagicMock()
+        mock_task.text = text
+        mock_task.generate_audio = _gen
+
+        options = MagicMock()
+        options.rate = 50
+        options.volume = 100
+        options.pitch = 50
+        options.sentence_silence_ms = 0
+
+        voice = MagicMock()
+        voice.key = "en_US-test-voice"
+        voice.speaker = "default_spk"
+        options.voice = voice
+
+        mock_task.speech_options = options
+        return mock_task
+
+    def test_plain_stream_plays_chunks_and_caches(self):
+        phrase_cache = driver_module.phrase_cache
+        mock_task = self._make_mock_task()
+        mock_player = MagicMock()
+
+        task = SpeechTask(mock_task, mock_player)
+        asyncio.run(task())
+
+        assert mock_player.feed.call_count == 2
+        assert mock_player.sync.call_count == 1
+
+        cached = phrase_cache.get(
+            "hello world", "en_US-test-voice", 50, 100, 50, speaker="default_spk"
+        )
+        assert cached is not None
+        assert len(cached) == 2
+
+    def test_cache_hit_plays_cached_chunks_directly(self):
+        phrase_cache = driver_module.phrase_cache
+        mock_task = self._make_mock_task()
+        mock_player = MagicMock()
+
+        phrase_cache.put(
+            "hello world",
+            "en_US-test-voice",
+            50,
+            100,
+            50,
+            False,
+            False,
+            [b"cached_chunk_1", b"cached_chunk_2"],
+            speaker="default_spk",
+        )
+
+        task = SpeechTask(mock_task, mock_player)
+        asyncio.run(task())
+
+        mock_player.feed.assert_any_call(b"cached_chunk_1")
+        mock_player.feed.assert_any_call(b"cached_chunk_2")
+        assert mock_player.sync.call_count == 1
+
+    def test_audio_processing_options_applied(self):
+        phrase_cache = driver_module.phrase_cache
+        mock_task = self._make_mock_task()
+        mock_player = MagicMock()
+
+        task = SpeechTask(
+            mock_task,
+            mock_player,
+            normalize=True,
+            night_mode=True,
+            spatial_audio=True,
+            pan=0.5,
+        )
+        asyncio.run(task())
+
+        assert mock_player.feed.called
+        assert mock_player.sync.called
+
+        # Spatial audio is not cached
+        cached = phrase_cache.get("hello world", "en_US-test-voice", 50, 100, 50)
+        assert cached is None
+
+    def test_say_all_normalizes_newlines_and_sentence_silence(self, monkeypatch):
+        from speech import sayAll
+
+        monkeypatch.setattr(sayAll.SayAllHandler, "isRunning", lambda: True)
+
+        mock_task = self._make_mock_task(text="line 1\nline 2\nline 3")
+        mock_player = MagicMock()
+
+        task = SpeechTask(mock_task, mock_player)
+        asyncio.run(task())
+
+        assert mock_task.text == "line 1 line 2 line 3"
+        assert mock_task.speech_options.sentence_silence_ms == 50
+
+    def test_speaker_switching_and_restoration(self):
+        mock_task = self._make_mock_task()
+        voice = mock_task.speech_options.voice
+        voice.speaker = "speaker_a"
+        mock_player = MagicMock()
+
+        speakers_during_stream = []
+
+        async def _gen():
+            speakers_during_stream.append(voice.speaker)
+            yield b"\x00\x10\x00\x20"
+
+        mock_task.generate_audio = _gen
+
+        task = SpeechTask(mock_task, mock_player, speaker="speaker_b")
+        asyncio.run(task())
+
+        assert speakers_during_stream == ["speaker_b"]
+        assert voice.speaker == "speaker_a"
+
+    def test_speaker_switching_handles_exception(self, monkeypatch):
+        mock_task = self._make_mock_task()
+
+        class BadVoice:
+            key = "en_US-test-voice"
+
+            @property
+            def speaker(self):
+                return "orig"
+
+            @speaker.setter
+            def speaker(self, val):
+                raise ValueError("cannot change speaker")
+
+        mock_task.speech_options.voice = BadVoice()
+        mock_player = MagicMock()
+
+        debug_mock = MagicMock()
+        monkeypatch.setattr(driver_module.log, "debug", debug_mock)
+
+        task = SpeechTask(mock_task, mock_player, speaker="new_speaker")
+        asyncio.run(task())
+
+        assert debug_mock.called
+        assert mock_player.feed.called

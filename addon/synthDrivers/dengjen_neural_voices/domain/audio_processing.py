@@ -56,72 +56,80 @@ class AudioStreamProcessor:
         self._left_gain = math.cos(angle)
         self._right_gain = math.sin(angle)
 
-    def process_chunk(self, chunk: bytes) -> bytes:
+    def _align_input_data(self, chunk: bytes) -> bytes:
         if not chunk and not self._remainder:
             return b""
-
         data = self._remainder + chunk
         if len(data) < 2:
             self._remainder = data
             return b""
-
         odd = len(data) % 2
         if odd:
             self._remainder = data[-odd:]
             data = data[:-odd]
         else:
             self._remainder = b""
+        return data
+
+    def _normalize_samples(self, samples: array.array) -> array.array:
+        n = len(samples)
+        sum_sq = sum(s * s for s in samples)
+        chunk_rms = math.sqrt(sum_sq / n) / _INT16_MAX
+
+        if chunk_rms >= 0.01:
+            target_gain = min(_TARGET_RMS / chunk_rms, 4.0)
+            if self._norm_gain is None:
+                self._norm_gain = target_gain
+            else:
+                self._norm_gain = 0.85 * self._norm_gain + 0.15 * target_gain
+        elif self._norm_gain is None:
+            self._norm_gain = 1.0
+
+        gain = self._norm_gain
+        ceiling = int(_PEAK_CEILING * _INT16_MAX)
+        return array.array(
+            "h",
+            (max(_INT16_MIN, min(ceiling, int(s * gain))) for s in samples),
+        )
+
+    def _night_mode_samples(self, samples: array.array) -> array.array:
+        alpha = _NIGHT_MODE_HIGHFREQ_DAMP
+        prev = self._night_mode_prev
+        filtered_samples = array.array("h")
+        for s in samples:
+            filtered = int(alpha * s + (1.0 - alpha) * prev)
+            prev = filtered
+            out = int(filtered * _NIGHT_MODE_GAIN)
+            filtered_samples.append(max(_INT16_MIN, min(_INT16_MAX, out)))
+        self._night_mode_prev = prev
+        return filtered_samples
+
+    def _spatial_samples(self, samples: array.array) -> array.array:
+        stereo = array.array("h")
+        for s in samples:
+            left_sample = max(_INT16_MIN, min(_INT16_MAX, int(s * self._left_gain)))
+            right_sample = max(_INT16_MIN, min(_INT16_MAX, int(s * self._right_gain)))
+            stereo.append(left_sample)
+            stereo.append(right_sample)
+        return stereo
+
+    def process_chunk(self, chunk: bytes) -> bytes:
+        data = self._align_input_data(chunk)
+        if not data:
+            return b""
 
         samples = _pcm_to_array(data)
         if not samples:
             return b""
 
-        # 1. RMS normalization (running gain across chunks to prevent tail amplification)
         if self.normalize:
-            n = len(samples)
-            sum_sq = sum(s * s for s in samples)
-            chunk_rms = math.sqrt(sum_sq / n) / _INT16_MAX
+            samples = self._normalize_samples(samples)
 
-            if chunk_rms >= 0.01:
-                target_gain = min(_TARGET_RMS / chunk_rms, 4.0)
-                if self._norm_gain is None:
-                    self._norm_gain = target_gain
-                else:
-                    self._norm_gain = 0.85 * self._norm_gain + 0.15 * target_gain
-            elif self._norm_gain is None:
-                self._norm_gain = 1.0
-
-            gain = self._norm_gain
-            ceiling = int(_PEAK_CEILING * _INT16_MAX)
-            samples = array.array(
-                "h",
-                (max(_INT16_MIN, min(ceiling, int(s * gain))) for s in samples),
-            )
-
-        # 2. Night mode softening (preserves filter state across chunk boundaries)
         if self.night_mode:
-            alpha = _NIGHT_MODE_HIGHFREQ_DAMP
-            prev = self._night_mode_prev
-            filtered_samples = array.array("h")
-            for s in samples:
-                filtered = int(alpha * s + (1.0 - alpha) * prev)
-                prev = filtered
-                out = int(filtered * _NIGHT_MODE_GAIN)
-                filtered_samples.append(max(_INT16_MIN, min(_INT16_MAX, out)))
-            self._night_mode_prev = prev
-            samples = filtered_samples
+            samples = self._night_mode_samples(samples)
 
-        # 3. Spatial audio (stereo panning)
         if self.spatial_audio:
-            stereo = array.array("h")
-            for s in samples:
-                left_sample = max(_INT16_MIN, min(_INT16_MAX, int(s * self._left_gain)))
-                right_sample = max(
-                    _INT16_MIN, min(_INT16_MAX, int(s * self._right_gain))
-                )
-                stereo.append(left_sample)
-                stereo.append(right_sample)
-            return _array_to_pcm(stereo)
+            return _array_to_pcm(self._spatial_samples(samples))
 
         return _array_to_pcm(samples)
 
