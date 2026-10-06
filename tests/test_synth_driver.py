@@ -373,6 +373,35 @@ class TestBuildSpeechTasks:
         finally:
             driver.terminate()
 
+    def test_structural_reading_uses_cached_speaker(self, driver):
+        driver.structural_reading = True
+        voice = driver.tts.speech_options.voice
+        voice.is_multi_speaker = True
+        voice.speaker_names = ["spk1", "spk2"]
+        driver.speaker = "spk1"
+
+        # Even if remote voice.speaker would raise, task building uses cached speaker
+        class ExplodingVoice:
+            @property
+            def speaker(self):
+                raise RuntimeError("remote read timeout")
+
+        # Set voice as having the property on its type or instance
+        voice.__class__ = type(
+            "MultiSpeakerVoice",
+            (voice.__class__,),
+            {
+                "speaker": property(
+                    lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+                )
+            },
+        )
+
+        tasks = driver._build_speech_tasks(["hello (aside) world"])
+        speech_tasks = [t for t in tasks if isinstance(t, SpeechTask)]
+        assert len(speech_tasks) == 3
+        assert speech_tasks[1].speaker == "spk2"
+
 
 class TestLifecycle:
     def test_speak_with_no_backend_does_not_raise(self, configured_voice, monkeypatch):

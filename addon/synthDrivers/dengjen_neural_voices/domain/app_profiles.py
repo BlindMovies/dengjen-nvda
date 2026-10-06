@@ -168,8 +168,7 @@ class AppProfileManager:
                 if not _is_valid_exe(name):
                     continue
                 data = _extract_profile_data(raw)
-                if data:
-                    result.append((name, data))
+                result.append((name, data))
         return sorted(result, key=lambda x: x[0])
 
     def apply_profile_dict(self, profile: dict, synth_driver) -> bool:

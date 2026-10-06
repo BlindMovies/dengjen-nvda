@@ -41,6 +41,7 @@ from ...aio import (
     asyncio_coroutine_to_concurrent_future,
     run_in_executor,
 )
+from ...const import FALLBACK_SPEAKER_NAME
 from ...domain.audio_processing import AudioStreamProcessor
 from ...domain.phrase_cache import phrase_cache
 from ...domain.structural_reading import split_into_segments
@@ -349,6 +350,7 @@ class SynthDriver(NvdaSynthDriver):
         self._player = None
         self._players = {}
         self._active_players = set()
+        self._current_speaker = None
         self._noise_scale_factor = None
         self._length_scale_factor = None
         self._noise_w_factor = None
@@ -464,7 +466,13 @@ class SynthDriver(NvdaSynthDriver):
             and getattr(voice, "is_multi_speaker", False)
             and len(getattr(voice, "speaker_names", [])) >= 2
         ):
-            default_spk = voice.speaker
+            default_spk = getattr(self, "_current_speaker", None)
+            if default_spk is None:
+                with suppress(Exception):
+                    default_spk = voice.speaker
+            if default_spk is None:
+                default_spk = FALLBACK_SPEAKER_NAME
+            self._current_speaker = default_spk
             spk_names = voice.speaker_names
             alt_spk = spk_names[1] if spk_names[0] == default_spk else spk_names[0]
             segments = split_into_segments(
@@ -733,6 +741,11 @@ class SynthDriver(NvdaSynthDriver):
 
         if speaker is not None:
             self._set_speaker(speaker)
+        else:
+            voice_obj = getattr(
+                getattr(self.tts, "speech_options", None), "voice", None
+            )
+            self._current_speaker = getattr(voice_obj, "default_speaker", None)
         try:
             update_displaied_params_on_voice_change(self)
         except Exception:
@@ -758,9 +771,15 @@ class SynthDriver(NvdaSynthDriver):
             return
         if voice_key not in self._voice_map:
             return
-        prev_speaker = self.tts.speech_options.voice.speaker
+        prev_speaker = getattr(self, "_current_speaker", None)
+        if prev_speaker is None:
+            with suppress(Exception):
+                prev_speaker = self.tts.speech_options.voice.speaker
         self.tts.voice = voice_key
-        self.tts.speech_options.voice.speaker = prev_speaker
+        if prev_speaker is not None:
+            with suppress(Exception):
+                self.tts.speech_options.voice.speaker = prev_speaker
+        self._current_speaker = prev_speaker
         DengjenConfig.setdefault(self.voice, {})["variant"] = value
 
         self._reapply_scale_settings()
@@ -792,18 +811,25 @@ class SynthDriver(NvdaSynthDriver):
         return all_voices
 
     def _get_speaker(self):
-        return self.tts.speaker
+        if self._current_speaker is not None:
+            return self._current_speaker
+        spk = self.tts.speaker
+        self._current_speaker = spk
+        return spk
 
     def _set_speaker(self, value):
         try:
             self.tts.speaker = value
+            self._current_speaker = value
             DengjenConfig.setdefault(self.voice, {})["speaker"] = value
         except SpeakerNotFoundError:
-            DengjenConfig.setdefault(self.voice, {})["speaker"] = self.tts.speaker
+            self._current_speaker = self.tts.speaker
+            DengjenConfig.setdefault(self.voice, {})["speaker"] = self._current_speaker
         except BackendError:
             log.exception(
                 "Could not apply the speaker: the speech engine is unreachable"
             )
+            self._current_speaker = value
             DengjenConfig.setdefault(self.voice, {})["speaker"] = value
         phrase_cache.clear()
 

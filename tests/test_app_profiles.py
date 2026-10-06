@@ -57,6 +57,14 @@ class TestAppProfileManager:
         assert "__many__" not in names
         assert "notepad.exe" in names
 
+    def test_list_profiles_includes_empty_profile(self, mock_nvda_config):
+        mgr = AppProfileManager()
+        section = mgr._profiles_section()
+        section["empty.exe"] = {"voice": None, "rate": None}
+
+        profiles = mgr.list_profiles()
+        assert ("empty.exe", {}) in profiles
+
     def test_get_profile_rejects_many_wildcard(self, mock_nvda_config):
         mgr = AppProfileManager()
         section = mgr._profiles_section()

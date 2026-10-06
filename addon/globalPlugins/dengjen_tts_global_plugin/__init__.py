@@ -269,10 +269,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             }
             app_profile_manager.apply_profile_dict(profile, synth)
         elif self._active_profile_overrides is not None:
-            app_profile_manager.apply_profile_dict(
+            if app_profile_manager.apply_profile_dict(
                 self._active_profile_overrides, synth
-            )
-            self._active_profile_overrides = None
+            ):
+                self._active_profile_overrides = None
 
     def event_gainFocus(self, obj, next_handler):
         try:
