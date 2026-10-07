@@ -52,14 +52,19 @@ def _delete_target_key(target, key: str) -> None:
         target._cache.pop(key, None)
 
 
+def _get_app_profiles_section(profile):
+    conf = profile
+    for k in ("speech", "dengjen_neural_voices", "app_profiles"):
+        if not hasattr(conf, "get"):
+            return None
+        conf = conf.get(k)
+    return conf
+
+
 def _delete_exe_from_profiles(profiles, exe: str) -> None:
     for p in profiles:
         with contextlib.suppress(Exception):
-            p_conf = p
-            for k in ("speech", "dengjen_neural_voices", "app_profiles"):
-                p_conf = p_conf.get(k) if hasattr(p_conf, "get") else None
-                if p_conf is None:
-                    break
+            p_conf = _get_app_profiles_section(p)
             if p_conf is not None and exe in p_conf:
                 del p_conf[exe]
                 if hasattr(config.conf, "_dirtyProfiles") and getattr(p, "name", None):

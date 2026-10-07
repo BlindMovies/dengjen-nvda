@@ -343,3 +343,61 @@ class TestOnFirstRunVoiceInstalled:
         monkeypatch.setattr(plugin_module.synthDriverHandler, "getSynth", lambda: synth)
         plugin._on_first_run_voice_installed("en_US-amy-low")
         assert not synth.terminate.called
+
+
+class TestAppFocusProfileHandling:
+    def test_handle_app_focus_skips_next_profile_when_restore_fails(
+        self, plugin, plugin_module, monkeypatch
+    ):
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        plugin._active_profile_overrides = {"rate": 50}
+        synth = MagicMock()
+        synth.rate = 70
+
+        monkeypatch.setattr(
+            app_profile_manager, "get_profile", lambda exe: {"rate": 80}
+        )
+        monkeypatch.setattr(
+            app_profile_manager,
+            "apply_profile_dict",
+            lambda profile, s: profile != {"rate": 50},
+        )
+
+        plugin._handle_app_focus("app.exe", synth)
+
+        assert plugin._active_profile_overrides == {"rate": 50}
+
+    def test_handle_app_focus_retains_overrides_when_unprofiled_restore_fails(
+        self, plugin, plugin_module, monkeypatch
+    ):
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        plugin._active_profile_overrides = {"rate": 50}
+        synth = MagicMock()
+
+        monkeypatch.setattr(app_profile_manager, "get_profile", lambda exe: {})
+        monkeypatch.setattr(
+            app_profile_manager, "apply_profile_dict", lambda profile, s: False
+        )
+
+        plugin._handle_app_focus("unprofiled.exe", synth)
+
+        assert plugin._active_profile_overrides == {"rate": 50}
+
+    def test_handle_app_focus_clears_overrides_when_unprofiled_restore_succeeds(
+        self, plugin, plugin_module, monkeypatch
+    ):
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        plugin._active_profile_overrides = {"rate": 50}
+        synth = MagicMock()
+
+        monkeypatch.setattr(app_profile_manager, "get_profile", lambda exe: {})
+        monkeypatch.setattr(
+            app_profile_manager, "apply_profile_dict", lambda profile, s: True
+        )
+
+        plugin._handle_app_focus("unprofiled.exe", synth)
+
+        assert plugin._active_profile_overrides is None

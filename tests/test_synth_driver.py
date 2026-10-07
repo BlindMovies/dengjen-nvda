@@ -402,6 +402,26 @@ class TestBuildSpeechTasks:
         assert len(speech_tasks) == 3
         assert speech_tasks[1].speaker == "spk2"
 
+    def test_non_structural_reading_uses_cached_speaker(self, driver):
+        driver.structural_reading = False
+        voice = driver.tts.speech_options.voice
+        driver.speaker = "spk1"
+
+        voice.__class__ = type(
+            "ExplodingVoice",
+            (voice.__class__,),
+            {
+                "speaker": property(
+                    lambda self: (_ for _ in ()).throw(RuntimeError("timeout"))
+                )
+            },
+        )
+
+        tasks = driver._build_speech_tasks(["hello world"])
+        speech_tasks = [t for t in tasks if isinstance(t, SpeechTask)]
+        assert len(speech_tasks) == 1
+        assert speech_tasks[0].speaker == "spk1"
+
 
 class TestLifecycle:
     def test_speak_with_no_backend_does_not_raise(self, configured_voice, monkeypatch):
@@ -1078,3 +1098,10 @@ class TestSpeechTaskExecution:
 
         assert debug_mock.called
         assert mock_player.feed.called
+        phrase_cache = driver_module.phrase_cache
+        assert (
+            phrase_cache.get(
+                "hello world", "en_US-test-voice", 50, 100, 50, speaker="new_speaker"
+            )
+            is None
+        )

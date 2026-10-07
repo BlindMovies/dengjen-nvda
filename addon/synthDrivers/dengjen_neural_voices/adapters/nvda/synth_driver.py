@@ -218,11 +218,16 @@ class SpeechTask:
         def _apply_speaker(spk):
             try:
                 voice.speaker = spk
+                return True
             except Exception:
                 log.debug("Failed setting task speaker", exc_info=True)
+                return False
 
+        applied_custom_speaker = False
+        speaker_applied = True
         if self.speaker is not None and self.speaker != orig_speaker:
-            await run_in_executor(_apply_speaker, self.speaker)
+            applied_custom_speaker = await run_in_executor(_apply_speaker, self.speaker)
+            speaker_applied = applied_custom_speaker
 
         try:
             rate = self.task.speech_options.rate
@@ -237,7 +242,7 @@ class SpeechTask:
             processor = self._create_processor()
             collected_chunks = await self._synthesize_and_stream(processor)
 
-            if not self.spatial_audio and collected_chunks:
+            if not self.spatial_audio and collected_chunks and speaker_applied:
                 phrase_cache.put(
                     self.task.text,
                     voice_key,
@@ -250,7 +255,7 @@ class SpeechTask:
                     speaker=speaker,
                 )
         finally:
-            if self.speaker is not None and self.speaker != orig_speaker:
+            if applied_custom_speaker:
                 await run_in_executor(_apply_speaker, orig_speaker)
 
 
@@ -466,13 +471,7 @@ class SynthDriver(NvdaSynthDriver):
             and getattr(voice, "is_multi_speaker", False)
             and len(getattr(voice, "speaker_names", [])) >= 2
         ):
-            default_spk = getattr(self, "_current_speaker", None)
-            if default_spk is None:
-                with suppress(Exception):
-                    default_spk = voice.speaker
-            if default_spk is None:
-                default_spk = FALLBACK_SPEAKER_NAME
-            self._current_speaker = default_spk
+            default_spk = self._active_speaker(voice)
             spk_names = voice.speaker_names
             alt_spk = spk_names[1] if spk_names[0] == default_spk else spk_names[0]
             segments = split_into_segments(
@@ -501,9 +500,21 @@ class SynthDriver(NvdaSynthDriver):
                 spatial_audio=do_spatial,
                 night_mode=do_night,
                 pan=pan,
-                speaker=getattr(voice, "speaker", None),
+                speaker=self._active_speaker(voice),
             )
         ]
+
+    def _active_speaker(self, voice):
+        spk = getattr(self, "_current_speaker", None)
+        if spk is None:
+            spk = getattr(voice, "default_speaker", None)
+        if spk is None:
+            with suppress(Exception):
+                spk = voice.speaker
+        if spk is None:
+            spk = FALLBACK_SPEAKER_NAME
+        self._current_speaker = spk
+        return spk
 
     def _apply_speech_command(self, item, default_lang):
         item_type = type(item)
