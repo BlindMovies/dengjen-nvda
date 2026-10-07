@@ -557,6 +557,33 @@ class TestProcessSpeechSequence:
         assert ran == []
         exception_mock.assert_called_once()
 
+    def test_a_task_error_still_runs_the_index_and_done_notifications(
+        self, monkeypatch
+    ):
+        ran = []
+
+        async def blows_up():
+            raise ValueError("boom")
+
+        class _Index:
+            async def __call__(self):
+                ran.append("index")
+
+        class _Done:
+            async def __call__(self):
+                ran.append("done")
+
+        monkeypatch.setattr(driver_module, "IndexReachedTask", _Index)
+        monkeypatch.setattr(driver_module, "DoneSpeakingTask", _Done)
+        monkeypatch.setattr(driver_module.log, "exception", MagicMock())
+        monkeypatch.setattr(driver_module, "CancelledError", asyncio.CancelledError)
+
+        asyncio.run(
+            driver_module._process_speech_sequence([blows_up, _Index(), _Done()])
+        )
+
+        assert ran == ["index", "done"]
+
 
 class TestSettings:
     """These only work because conftest's _AutoPropertyMeta wires _get_x/
