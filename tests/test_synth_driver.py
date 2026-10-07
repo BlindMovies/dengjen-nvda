@@ -407,6 +407,35 @@ class TestBuildSpeechTasks:
         finally:
             driver.terminate()
 
+    def test_a_voice_switch_drops_the_previous_voices_cached_speaker(
+        self, configured_voice, fake_backend
+    ):
+        second_voice_dir = _write_voice(configured_voice, key="fr_FR-test-medium")
+        second_config_path = str(next(second_voice_dir.glob("*.json")))
+        fake_backend.voices_by_config_path[second_config_path] = LoadedVoice(
+            backend_voice_id="fake-remote-id-fr",
+            supports_streaming_output=False,
+            sample_rate=24000,
+            speakers={},
+            defaults=SynthOptions(
+                speaker=None, length_scale=1.0, noise_scale=0.667, noise_w=0.8
+            ),
+        )
+        driver = SynthDriver()
+        try:
+            driver._current_speaker = "english-speaker"
+
+            with driver.tts.create_synthesis_context():
+                tasks = driver._build_speech_tasks(
+                    ["hello", _lang_change_command("fr_FR"), "bonjour"]
+                )
+
+            speakers = [t.speaker for t in tasks if isinstance(t, SpeechTask)]
+            assert speakers[0] == "english-speaker"
+            assert speakers[1] != "english-speaker"
+        finally:
+            driver.terminate()
+
     def test_structural_reading_uses_cached_speaker(self, driver):
         driver.structural_reading = True
         voice = driver.tts.speech_options.voice
@@ -415,11 +444,6 @@ class TestBuildSpeechTasks:
         driver.speaker = "spk1"
 
         # Even if remote voice.speaker would raise, task building uses cached speaker
-        class ExplodingVoice:
-            @property
-            def speaker(self):
-                raise RuntimeError("remote read timeout")
-
         # Set voice as having the property on its type or instance
         voice.__class__ = type(
             "MultiSpeakerVoice",
@@ -455,6 +479,43 @@ class TestBuildSpeechTasks:
         speech_tasks = [t for t in tasks if isinstance(t, SpeechTask)]
         assert len(speech_tasks) == 1
         assert speech_tasks[0].speaker == "spk1"
+
+
+class TestPlayerCreation:
+    @pytest.fixture
+    def stereo_failing(self, monkeypatch):
+        real = driver_module.create_wave_player
+
+        def install(error):
+            def create(sample_rate, channels=1):
+                if channels != 1:
+                    raise error
+                return real(sample_rate)
+
+            monkeypatch.setattr(driver_module, "create_wave_player", create)
+
+        return install
+
+    @pytest.mark.parametrize("error", [TypeError("no channels"), OSError("bad format")])
+    def test_a_stereo_failure_falls_back_to_a_mono_player(
+        self, driver, stereo_failing, error
+    ):
+        stereo_failing(error)
+        driver.spatial_audio = True
+
+        player = driver._get_or_create_player(22050)
+
+        assert driver.spatial_audio is False
+        assert driver._players[22050] is player
+
+    def test_a_mono_failure_is_not_swallowed(self, driver, monkeypatch):
+        def create(sample_rate, channels=1):
+            raise OSError("no device")
+
+        monkeypatch.setattr(driver_module, "create_wave_player", create)
+
+        with pytest.raises(OSError):
+            driver._get_or_create_player(22050)
 
 
 class TestLifecycle:

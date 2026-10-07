@@ -253,31 +253,32 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     script_toggleNightMode.__doc__ = _("Toggles Dengjen night mode (soft, quiet audio)")
 
-    def _handle_app_focus(self, exe: str, synth):
+    def _restore_baseline(self, synth) -> bool:
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        if self._active_profile_overrides is None:
+            return True
+        if not app_profile_manager.apply_profile_dict(
+            self._active_profile_overrides, synth
+        ):
+            return False
+        self._active_profile_overrides = None
+        return True
+
+    def _handle_app_focus(self, exe: str, synth) -> bool:
         from dengjen_neural_voices.domain.app_profiles import app_profile_manager
 
         profile = app_profile_manager.get_profile(exe)
-        if profile:
-            if (
-                self._active_profile_overrides is not None
-                and not app_profile_manager.apply_profile_dict(
-                    self._active_profile_overrides, synth
-                )
-            ):
-                return
-            self._active_profile_overrides = {
-                k: getattr(synth, k, None)
-                for k in profile
-                if hasattr(synth, k) and getattr(synth, k, None) is not None
-            }
-            app_profile_manager.apply_profile_dict(profile, synth)
-        elif (
-            self._active_profile_overrides is not None
-            and app_profile_manager.apply_profile_dict(
-                self._active_profile_overrides, synth
-            )
-        ):
-            self._active_profile_overrides = None
+        if not self._restore_baseline(synth):
+            return False
+        if not profile:
+            return True
+        self._active_profile_overrides = {
+            k: getattr(synth, k, None)
+            for k in profile
+            if hasattr(synth, k) and getattr(synth, k, None) is not None
+        }
+        return app_profile_manager.apply_profile_dict(profile, synth)
 
     def event_gainFocus(self, obj, next_handler):
         try:
@@ -285,9 +286,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             exe = getattr(app, "appName", "").lower() if app else ""
             if exe and exe != self._last_exe:
                 synth = _get_dengjen_synth()
-                if synth is not None:
+                if synth is not None and self._handle_app_focus(exe, synth):
                     self._last_exe = exe
-                    self._handle_app_focus(exe, synth)
         except Exception:
             log.debug("Failed handling focus change for app profile", exc_info=True)
         next_handler()

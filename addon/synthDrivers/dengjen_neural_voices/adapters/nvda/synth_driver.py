@@ -528,9 +528,12 @@ class SynthDriver(NvdaSynthDriver):
                 self._player,
             )
         if item_type is LangChangeCommand:
+            previous_key = self.tts.speech_options.voice.key
             with suppress(VoiceNotFoundError):
                 self.tts.language = default_lang if item.isDefault else item.lang
             voice = self.tts.speech_options.voice
+            if voice.key != previous_key:
+                self._current_speaker = None
             self._player = self._get_or_create_player(voice.sample_rate)
         elif item_type is RateCommand:
             self.tts.rate = item.newValue
@@ -588,21 +591,24 @@ class SynthDriver(NvdaSynthDriver):
         channels = 2 if self._get_spatial_audio() else 1
         key = sample_rate if channels == 1 else (sample_rate, channels)
         if key not in self._players:
-            try:
-                player = (
-                    create_wave_player(sample_rate, channels=channels)
-                    if channels != 1
-                    else create_wave_player(sample_rate)
-                )
-            except TypeError:
-                if channels != 1:
-                    self._spatial_audio_enabled = False
-                    channels = 1
-                    key = sample_rate
-                player = create_wave_player(sample_rate)
+            player, key = self._open_player(sample_rate, channels)
             player.setVolume(all=self.tts.volume / 100)
             self._players[key] = player
         return self._players[key]
+
+    def _open_player(self, sample_rate, channels):
+        if channels == 1:
+            return create_wave_player(sample_rate), sample_rate
+        try:
+            player = create_wave_player(sample_rate, channels=channels)
+            return player, (sample_rate, channels)
+        except (TypeError, OSError):
+            log.warning(
+                "Stereo playback is unavailable; turning spatial audio off",
+                exc_info=True,
+            )
+            self._spatial_audio_enabled = False
+            return create_wave_player(sample_rate), sample_rate
 
     def _get_rateBoost(self):
         return self._rateBoost

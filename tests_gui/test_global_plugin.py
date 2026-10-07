@@ -401,3 +401,35 @@ class TestAppFocusProfileHandling:
         plugin._handle_app_focus("unprofiled.exe", synth)
 
         assert plugin._active_profile_overrides is None
+
+    def test_handle_app_focus_reports_failure_when_new_profile_fails_to_apply(
+        self, plugin, plugin_module, monkeypatch
+    ):
+        from dengjen_neural_voices.domain.app_profiles import app_profile_manager
+
+        monkeypatch.setattr(
+            app_profile_manager, "get_profile", lambda exe: {"rate": 80}
+        )
+        monkeypatch.setattr(
+            app_profile_manager, "apply_profile_dict", lambda profile, s: False
+        )
+
+        assert plugin._handle_app_focus("app.exe", MagicMock()) is False
+
+    def test_gain_focus_retries_the_same_app_after_a_failed_update(
+        self, plugin, plugin_module, monkeypatch
+    ):
+        outcomes = iter([False, True])
+        monkeypatch.setattr(plugin_module, "_get_dengjen_synth", lambda: MagicMock())
+        monkeypatch.setattr(
+            plugin, "_handle_app_focus", lambda exe, synth: next(outcomes)
+        )
+        plugin._last_exe = None
+        obj = MagicMock()
+        obj.appModule.appName = "App.exe"
+
+        plugin.event_gainFocus(obj, lambda: None)
+        assert plugin._last_exe is None
+
+        plugin.event_gainFocus(obj, lambda: None)
+        assert plugin._last_exe == "app.exe"
