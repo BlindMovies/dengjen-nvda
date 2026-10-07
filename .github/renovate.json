@@ -21,6 +21,15 @@
   ],
   "packageRules": [
     {
+      "description": "Generated stubs reject a runtime older than the gencode, so the vendored runtime and codegen toolchain move together.",
+      "matchDepNames": [
+        "protobuf",
+        "grpcio",
+        "grpcio-tools"
+      ],
+      "groupName": "grpc and protobuf"
+    },
+    {
       "description": "Python version is the NVDA runtime ABI (vendored cp313 wheels); bump only when NVDA changes Python.",
       "matchDepNames": [
         "python"

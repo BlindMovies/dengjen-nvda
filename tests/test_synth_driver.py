@@ -22,6 +22,7 @@ stand-ins used here don't interfere with the on-disk fixtures above.
 
 import asyncio
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import config
@@ -237,6 +238,39 @@ class TestConstruction:
         d = SynthDriver.__new__(SynthDriver)
         d._set_spatial_audio(True)
         assert d.spatial_audio is True
+
+
+class TestSpeechTask:
+    def test_feeds_every_chunk_then_waits_for_the_player_to_drain(self, monkeypatch):
+        calls = []
+
+        async def run_inline(fn, *args):
+            return fn(*args)
+
+        class _Player:
+            def feed(self, chunk):
+                calls.append(("feed", chunk))
+
+            def sync(self):
+                calls.append(("sync",))
+
+        async def _audio():
+            yield b"one"
+            yield b"two"
+
+        monkeypatch.setattr(driver_module, "run_in_executor", run_inline)
+        options = SimpleNamespace(
+            voice=SimpleNamespace(key="voice", speaker=None),
+            rate=50,
+            volume=100,
+            pitch=50,
+        )
+        task = SimpleNamespace(text="hi", speech_options=options, generate_audio=_audio)
+        driver_module.phrase_cache.clear()
+
+        asyncio.run(SpeechTask(task, _Player())())
+
+        assert calls == [("feed", b"one"), ("feed", b"two"), ("sync",)]
 
 
 class TestBuildSpeechTasks:
@@ -612,6 +646,33 @@ class TestProcessSpeechSequence:
 
         assert ran == []
         exception_mock.assert_called_once()
+
+    def test_a_task_error_still_runs_the_index_and_done_notifications(
+        self, monkeypatch
+    ):
+        ran = []
+
+        async def blows_up():
+            raise ValueError("boom")
+
+        class _Index:
+            async def __call__(self):
+                ran.append("index")
+
+        class _Done:
+            async def __call__(self):
+                ran.append("done")
+
+        monkeypatch.setattr(driver_module, "IndexReachedTask", _Index)
+        monkeypatch.setattr(driver_module, "DoneSpeakingTask", _Done)
+        monkeypatch.setattr(driver_module.log, "exception", MagicMock())
+        monkeypatch.setattr(driver_module, "CancelledError", asyncio.CancelledError)
+
+        asyncio.run(
+            driver_module._process_speech_sequence([blows_up, _Index(), _Done()])
+        )
+
+        assert ran == ["index", "done"]
 
 
 class TestSettings:

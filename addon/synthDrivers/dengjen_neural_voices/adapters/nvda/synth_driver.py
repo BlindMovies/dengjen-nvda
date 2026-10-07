@@ -49,6 +49,7 @@ from ...domain.tts_system import (
     DengjenTextToSpeechSystem,
     SpeakerNotFoundError,
     SpeechOptions,
+    VoiceNotFoundError,
 )
 from ...helpers import update_displaied_params_on_voice_change
 from ...ports.tts_backend import BackendError, BackendUnavailableError
@@ -286,15 +287,18 @@ def create_wave_player(sample_rate, channels=1):
 
 
 async def _process_speech_sequence(speech_seq):
-    for callable in speech_seq:
+    failed = False
+    for task in speech_seq:
+        if failed and not isinstance(task, (IndexReachedTask, DoneSpeakingTask)):
+            continue
         try:
-            await callable()
+            await task()
         except (AsyncioCancelledError, CancelledError):
-            log.debug(f"Canceled speech task {callable}", exc_info=True)
+            log.debug(f"Canceled speech task {task}", exc_info=True)
             break
         except Exception:
-            log.exception(f"Failed to execute speech task {callable}", exc_info=True)
-            break
+            log.exception(f"Failed to execute speech task {task}", exc_info=True)
+            failed = True
 
 
 @asyncio_coroutine_to_concurrent_future
@@ -524,7 +528,8 @@ class SynthDriver(NvdaSynthDriver):
                 self._player,
             )
         if item_type is LangChangeCommand:
-            self.tts.language = default_lang if item.isDefault else item.lang
+            with suppress(VoiceNotFoundError):
+                self.tts.language = default_lang if item.isDefault else item.lang
             voice = self.tts.speech_options.voice
             self._player = self._get_or_create_player(voice.sample_rate)
         elif item_type is RateCommand:

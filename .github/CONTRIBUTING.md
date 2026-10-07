@@ -8,7 +8,7 @@ Contributions are welcome.
 
 Use the **Bug report** template at <https://github.com/ZirekHQ/dengjen-nvda/issues/new/choose>. The template asks for NVDA version, add-on version, OS, voice tested, steps to reproduce, and an NVDA log slice — please fill in as much as you can. Bugs filed without that info almost always end up labelled `needs-reproducer` until they have it.
 
-For installation questions or general usage help, check the [readme](readme.md) first and then ask on the [NVDA add-ons community list](https://nvda-addons.groups.io/g/nvda-addons).
+For installation questions or general usage help, check the [readme](../README.md) first and then ask on the [NVDA add-ons community list](https://nvda-addons.groups.io/g/nvda-addons).
 
 ## Suggesting a feature
 
@@ -17,6 +17,8 @@ Use the **Feature request** template. Describe the *problem* you're trying to so
 ## Development setup
 
 The add-on is built with [SCons](https://scons.org/) targeting Python 3.13 (the version embedded in NVDA 2026.1+). On Windows or any platform with Python 3.13:
+
+Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) first; `vendor_libs.py fetch` calls it.
 
 ```bash
 python -m pip install --upgrade pip wheel
@@ -104,17 +106,14 @@ Each of these cost a CI round or a review finding to nail down — read before w
 
 Coverage note: `tests/`, `tests_contract/` and `tests_gui/` feed one `coverage.xml` — `tests_e2e/` contributes none, since it drives a real installed add-on rather than an in-process coverage-instrumented one. `sonar.yml` runs a `windows_coverage` job that measures those three trees — each into its own `COVERAGE_FILE`, because a bare `pytest --cov` erases the data files it finds — and the scan job `coverage combine`s them with its own ubuntu run. `relative_files` in `.coveragerc` is what lets that work across OSes: combine remaps the Windows data's `addon\...` paths onto `addon/...`. Only `grpc_client/**` stays in `sonar.coverage.exclusions`, because no tree executes it (`tests_contract/` talks to the generated stubs directly).
 
-## Refreshing the bundled binaries
+## Bundled libraries
 
-The add-on bundles three native dependencies built for Python 3.13 / Windows x64:
+The add-on bundles native dependencies built for Python 3.13 / Windows x64. They are not committed: the `vendor` dependency group in `pyproject.toml` and `uv.lock` pin them, and `lib/` is generated.
 
 ```bash
-python update_grpc.py        # gRPC + protobuf
-python update_miniaudio.py   # audio decoding
-python update_cffi.py        # C FFI runtime
+python vendor_libs.py fetch                  # install the locked libraries into lib/; run before scons or pytest
+uv lock --upgrade-package <name>             # bump one (Renovate does this for you)
 ```
-
-Each script fetches the matching `cp313-win_amd64` wheel from PyPI and swaps the contents under `addon/synthDrivers/dengjen_neural_voices/lib/`.
 
 The engine binary `bin/dengjen-tts-grpc.exe` is not committed. It comes from a [dengjen-tts](https://github.com/ZirekHQ/dengjen-tts) release pinned (version and zip sha256) in `dengjen-tts.lock`:
 
@@ -127,7 +126,22 @@ python update_dengjen_tts.py bump [VERSION] # re-pin (default: latest stable grp
 
 ## Submitting a PR
 
-Use the pull request template. Link the issue with `Closes #N` in the PR body — GitHub will auto-close the issue when the PR merges.
+Use the pull request template. Link the issue with `Closes #N` in the PR body — GitHub will auto-close the issue when the PR merges. A PR with no issue is fine for a small fix or a translation.
+
+**Keep a PR to one purpose.** Small PRs merge fast; large ones take weeks. Open an issue first, and wait for a reply, before a feature that is over about 500 lines or touches several subsystems (the synth driver, the global plugin and the domain layer, say).
+
+### What CI runs on your PR
+
+- **Build, unit tests, lint, audit and zizmor** run on every PR. The Windows leg also runs `tests_gui/`, and the e2e job drives a real NVDA.
+- **SonarCloud** scans fork PRs automatically once the `Sonar fork coverage` run succeeds. A maintainer can comment `/sonar` to re-run the scan. The gate needs at least 80% coverage on new code, and cognitive complexity of at most 15 per function.
+- **CodeRabbit** reviews are advisory. Fix a finding or reply on the thread explaining why it doesn't apply. Maintainers close bot threads that are verifiably fixed, so you don't need to chase them.
+- A thread you opened is closed by its author or a maintainer, never by marking it resolved to clear the count.
+
+A maintainer may ask a large PR that arrives without an issue to get one, or to split into smaller PRs. Splitting is usually the more useful request, because the work already exists.
+
+### Long-running PRs
+
+The add-on's structure changes over time, and a branch that falls behind `main` for more than about a week can become hard to rebase. A maintainer may push a rebase to your branch, or reimplement the change on current `main` and credit you in the PR. If the code has moved too far to carry forward, the PR is closed as superseded, with a note on what carries over.
 
 Conventions used in this project:
 
