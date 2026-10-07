@@ -8,7 +8,7 @@ Contributions are welcome.
 
 Use the **Bug report** template at <https://github.com/ZirekHQ/dengjen-nvda/issues/new/choose>. The template asks for NVDA version, add-on version, OS, voice tested, steps to reproduce, and an NVDA log slice â€” please fill in as much as you can. Bugs filed without that info almost always end up labelled `needs-reproducer` until they have it.
 
-For installation questions or general usage help, check the [readme](../readme.md) first and then ask on the [NVDA add-ons community list](https://nvda-addons.groups.io/g/nvda-addons).
+For installation questions or general usage help, check the [readme](../README.md) first and then ask on the [NVDA add-ons community list](https://nvda-addons.groups.io/g/nvda-addons).
 
 ## Suggesting a feature
 
@@ -133,7 +133,7 @@ Use the pull request template. Link the issue with `Closes #N` in the PR body â€
 ### What CI runs on your PR
 
 - **Build, unit tests, lint, audit and zizmor** run on every PR. The Windows leg also runs `tests_gui/`, and the e2e job drives a real NVDA.
-- **SonarCloud** doesn't run automatically on fork PRs. A maintainer comments `/sonar` to start the scan. The gate needs at least 80% coverage on new code, and cognitive complexity of at most 15 per function.
+- **SonarCloud** scans fork PRs automatically once the `Sonar fork coverage` run succeeds. A maintainer can comment `/sonar` to re-run the scan. The gate needs at least 80% coverage on new code, and cognitive complexity of at most 15 per function.
 - **CodeRabbit** reviews are advisory. Fix a finding or reply on the thread explaining why it doesn't apply. Maintainers close bot threads that are verifiably fixed, so you don't need to chase them.
 - A thread you opened is closed by its author or a maintainer, never by marking it resolved to clear the count.
 
