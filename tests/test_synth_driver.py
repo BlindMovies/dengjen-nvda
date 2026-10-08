@@ -433,6 +433,7 @@ class TestBuildSpeechTasks:
             speakers = [t.speaker for t in tasks if isinstance(t, SpeechTask)]
             assert speakers[0] == "english-speaker"
             assert speakers[1] != "english-speaker"
+            assert driver._current_speaker is None
         finally:
             driver.terminate()
 
@@ -507,6 +508,17 @@ class TestPlayerCreation:
 
         assert driver.spatial_audio is False
         assert driver._players[22050] is player
+
+    def test_a_stereo_failure_reuses_the_existing_mono_player(
+        self, driver, stereo_failing
+    ):
+        driver.spatial_audio = False
+        mono = driver._get_or_create_player(22050)
+        stereo_failing(OSError("bad format"))
+        driver.spatial_audio = True
+
+        assert driver._get_or_create_player(22050) is mono
+        assert list(driver._players.values()) == [mono]
 
     def test_a_mono_failure_is_not_swallowed(self, driver, monkeypatch):
         def create(sample_rate, channels=1):

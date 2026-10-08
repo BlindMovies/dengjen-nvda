@@ -424,7 +424,7 @@ class TestAppFocusProfileHandling:
         monkeypatch.setattr(
             plugin, "_handle_app_focus", lambda exe, synth: next(outcomes)
         )
-        plugin._last_exe = None
+        plugin._last_exe = "previous.exe"
         obj = MagicMock()
         obj.appModule.appName = "App.exe"
 

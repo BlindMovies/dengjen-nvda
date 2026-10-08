@@ -286,8 +286,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             exe = getattr(app, "appName", "").lower() if app else ""
             if exe and exe != self._last_exe:
                 synth = _get_dengjen_synth()
-                if synth is not None and self._handle_app_focus(exe, synth):
-                    self._last_exe = exe
+                if synth is not None:
+                    ok = self._handle_app_focus(exe, synth)
+                    self._last_exe = exe if ok else None
         except Exception:
             log.debug("Failed handling focus change for app profile", exc_info=True)
         next_handler()

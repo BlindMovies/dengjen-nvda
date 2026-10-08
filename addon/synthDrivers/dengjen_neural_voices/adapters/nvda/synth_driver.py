@@ -508,6 +508,19 @@ class SynthDriver(NvdaSynthDriver):
             )
         ]
 
+    def _current_voice_key(self):
+        options = getattr(self.tts, "speech_options", None)
+        return getattr(getattr(options, "voice", None), "key", None)
+
+    @property
+    def _current_speaker(self):
+        key, speaker = getattr(self, "_speaker_cache", (None, None))
+        return speaker if key == self._current_voice_key() else None
+
+    @_current_speaker.setter
+    def _current_speaker(self, speaker):
+        self._speaker_cache = (self._current_voice_key(), speaker)
+
     def _active_speaker(self, voice):
         spk = getattr(self, "_current_speaker", None)
         if spk is None:
@@ -528,12 +541,9 @@ class SynthDriver(NvdaSynthDriver):
                 self._player,
             )
         if item_type is LangChangeCommand:
-            previous_key = self.tts.speech_options.voice.key
             with suppress(VoiceNotFoundError):
                 self.tts.language = default_lang if item.isDefault else item.lang
             voice = self.tts.speech_options.voice
-            if voice.key != previous_key:
-                self._current_speaker = None
             self._player = self._get_or_create_player(voice.sample_rate)
         elif item_type is RateCommand:
             self.tts.rate = item.newValue
@@ -608,7 +618,8 @@ class SynthDriver(NvdaSynthDriver):
                 exc_info=True,
             )
             self._spatial_audio_enabled = False
-            return create_wave_player(sample_rate), sample_rate
+            existing = self._players.get(sample_rate)
+            return existing or create_wave_player(sample_rate), sample_rate
 
     def _get_rateBoost(self):
         return self._rateBoost
